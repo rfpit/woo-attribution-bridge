@@ -1,0 +1,40 @@
+<?xml version="1.0"?>
+<phpunit
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:noNamespaceSchemaLocation="https://schema.phpunit.de/10.0/phpunit.xsd"
+	bootstrap="tests/bootstrap.php"
+	colors="true"
+	cacheDirectory=".phpunit.cache"
+	executionOrder="depends,defects"
+	beStrictAboutOutputDuringTests="true"
+>
+	<testsuites>
+		<testsuite name="unit">
+			<directory suffix="Test.php">tests/Unit</directory>
+		</testsuite>
+	</testsuites>
+
+	<source>
+		<include>
+			<directory suffix=".php">src/includes</directory>
+			<directory suffix=".php">src/integrations</directory>
+			<directory suffix=".php">src/admin</directory>
+			<directory suffix=".php">src/public</directory>
+		</include>
+		<exclude>
+			<directory suffix=".php">src/admin/views</directory>
+		</exclude>
+	</source>
+
+	<php>
+		<const name="ABSPATH" value="/tmp/wordpress/"/>
+		<const name="WAB_VERSION" value="1.0.0"/>
+		<const name="WAB_PLUGIN_FILE" value="/tmp/wordpress/wp-content/plugins/woo-attribution-bridge/woo-attribution-bridge.php"/>
+		<const name="WAB_PLUGIN_DIR" value="/tmp/wordpress/wp-content/plugins/woo-attribution-bridge/"/>
+		<const name="WAB_PLUGIN_URL" value="http://localhost/wp-content/plugins/woo-attribution-bridge/"/>
+		<const name="WAB_PLUGIN_BASENAME" value="woo-attribution-bridge/woo-attribution-bridge.php"/>
+		<const name="COOKIEPATH" value="/"/>
+		<const name="COOKIE_DOMAIN" value=""/>
+		<const name="DAY_IN_SECONDS" value="86400"/>
+	</php>
+</phpunit>

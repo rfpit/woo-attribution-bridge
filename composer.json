@@ -1,0 +1,44 @@
+{
+  "name": "urushop/woo-attribution-bridge",
+  "description": "First-party attribution tracking for WooCommerce with server-side conversion APIs",
+  "type": "wordpress-plugin",
+  "license": "GPL-2.0-or-later",
+  "authors": [
+    {
+      "name": "UruShop",
+      "homepage": "https://urushop.co.uk"
+    }
+  ],
+  "require": {
+    "php": ">=8.0"
+  },
+  "require-dev": {
+    "phpunit/phpunit": "^10.0",
+    "brain/monkey": "^2.6",
+    "mockery/mockery": "^1.6",
+    "yoast/phpunit-polyfills": "^2.0"
+  },
+  "autoload": {
+    "classmap": [
+      "src/includes/",
+      "src/integrations/",
+      "src/admin/",
+      "src/public/"
+    ]
+  },
+  "autoload-dev": {
+    "psr-4": {
+      "WAB\\Tests\\": "tests/"
+    }
+  },
+  "scripts": {
+    "test": "phpunit",
+    "test:unit": "phpunit --testsuite=unit",
+    "test:coverage": "XDEBUG_MODE=coverage phpunit --coverage-html coverage --coverage-text"
+  },
+  "config": {
+    "allow-plugins": {
+      "dealerdirect/phpcodesniffer-composer-installer": true
+    }
+  }
+}

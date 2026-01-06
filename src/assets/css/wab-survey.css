@@ -1,0 +1,222 @@
+/**
+ * WooCommerce Attribution Bridge - Survey Styles
+ *
+ * @package WooAttributionBridge
+ */
+
+.wab-survey {
+	max-width: 600px;
+	margin: 30px auto;
+	padding: 25px;
+	background: #fff;
+	border: 1px solid #e0e0e0;
+	border-radius: 8px;
+	box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+}
+
+.wab-survey-inner {
+	text-align: center;
+}
+
+.wab-survey-title {
+	margin: 0 0 20px;
+	font-size: 1.3em;
+	font-weight: 600;
+	color: #333;
+}
+
+.wab-survey-options {
+	display: flex;
+	flex-wrap: wrap;
+	justify-content: center;
+	gap: 10px;
+	margin-bottom: 15px;
+}
+
+.wab-survey-option {
+	padding: 12px 20px;
+	font-size: 0.95em;
+	font-weight: 500;
+	color: #444;
+	background: #f8f8f8;
+	border: 2px solid #e0e0e0;
+	border-radius: 25px;
+	cursor: pointer;
+	transition: all 0.2s ease;
+	min-width: 120px;
+}
+
+.wab-survey-option:hover {
+	background: #f0f0f0;
+	border-color: #ccc;
+}
+
+.wab-survey-option:focus {
+	outline: none;
+	border-color: #0073aa;
+	box-shadow: 0 0 0 2px rgba(0, 115, 170, 0.2);
+}
+
+.wab-survey-option.selected {
+	background: #0073aa;
+	border-color: #0073aa;
+	color: #fff;
+}
+
+.wab-survey-option.loading {
+	opacity: 0.6;
+	pointer-events: none;
+}
+
+.wab-survey-other {
+	margin-top: 15px;
+	display: flex;
+	gap: 10px;
+	justify-content: center;
+	flex-wrap: wrap;
+}
+
+.wab-survey-other-input {
+	flex: 1;
+	max-width: 300px;
+	padding: 10px 15px;
+	font-size: 0.95em;
+	border: 2px solid #e0e0e0;
+	border-radius: 5px;
+	transition: border-color 0.2s ease;
+}
+
+.wab-survey-other-input:focus {
+	outline: none;
+	border-color: #0073aa;
+}
+
+.wab-survey-submit-other {
+	padding: 10px 25px;
+	font-size: 0.95em;
+	font-weight: 600;
+	color: #fff;
+	background: #0073aa;
+	border: none;
+	border-radius: 5px;
+	cursor: pointer;
+	transition: background 0.2s ease;
+}
+
+.wab-survey-submit-other:hover {
+	background: #005a87;
+}
+
+.wab-survey-submit-other:disabled {
+	opacity: 0.6;
+	cursor: not-allowed;
+}
+
+.wab-survey-thanks {
+	padding: 20px;
+}
+
+.wab-survey-thanks-message {
+	font-size: 1.1em;
+	font-weight: 600;
+	color: #2e7d32;
+	margin: 0 0 10px;
+}
+
+.wab-survey-coupon {
+	font-size: 0.95em;
+	color: #555;
+	margin: 0;
+	padding: 15px;
+	background: #f0f8ff;
+	border-radius: 5px;
+	border: 1px dashed #0073aa;
+}
+
+.wab-survey-error p {
+	font-size: 0.95em;
+	color: #c62828;
+	margin: 0;
+	padding: 15px;
+	background: #ffebee;
+	border-radius: 5px;
+}
+
+/* Loading spinner */
+.wab-survey-option.loading::after {
+	content: '';
+	display: inline-block;
+	width: 14px;
+	height: 14px;
+	margin-left: 8px;
+	border: 2px solid rgba(255, 255, 255, 0.3);
+	border-radius: 50%;
+	border-top-color: #fff;
+	animation: wab-spin 0.8s linear infinite;
+}
+
+@keyframes wab-spin {
+	to {
+		transform: rotate(360deg);
+	}
+}
+
+/* Responsive adjustments */
+@media (max-width: 480px) {
+	.wab-survey {
+		margin: 20px 10px;
+		padding: 20px 15px;
+	}
+
+	.wab-survey-title {
+		font-size: 1.1em;
+	}
+
+	.wab-survey-option {
+		padding: 10px 15px;
+		font-size: 0.9em;
+		min-width: 100px;
+	}
+
+	.wab-survey-other {
+		flex-direction: column;
+	}
+
+	.wab-survey-other-input {
+		max-width: 100%;
+	}
+}
+
+/* Dark mode support */
+@media (prefers-color-scheme: dark) {
+	.wab-survey {
+		background: #2d2d2d;
+		border-color: #444;
+	}
+
+	.wab-survey-title {
+		color: #fff;
+	}
+
+	.wab-survey-option {
+		background: #3d3d3d;
+		border-color: #555;
+		color: #eee;
+	}
+
+	.wab-survey-option:hover {
+		background: #4d4d4d;
+		border-color: #666;
+	}
+
+	.wab-survey-other-input {
+		background: #3d3d3d;
+		border-color: #555;
+		color: #eee;
+	}
+
+	.wab-survey-coupon {
+		background: #1a2e3a;
+		border-color: #0073aa;
+	}
+}
