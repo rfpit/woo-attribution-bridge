@@ -6,15 +6,18 @@
 
 export {
   ShopifyClient,
+  getShopifyAuthUrl,
+  exchangeCodeForToken,
+  extractClickIds,
+  extractUtmParams,
+} from "./client";
+
+export type {
   ShopifyConfig,
   ShopifySession,
   ShopifyOrder,
   ShopifyLineItem,
   ShopifyCustomer,
-  getShopifyAuthUrl,
-  exchangeCodeForToken,
-  extractClickIds,
-  extractUtmParams,
 } from "./client";
 
 export {

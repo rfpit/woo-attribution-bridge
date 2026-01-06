@@ -22,6 +22,9 @@ export function formatPercentage(num: number): string {
   return `${num.toFixed(1)}%`;
 }
 
+// Alias for formatPercentage
+export const formatPercent = formatPercentage;
+
 export function formatROAS(num: number): string {
   return `${num.toFixed(1)}x`;
 }

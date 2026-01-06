@@ -18,6 +18,8 @@ Thumbs.db
 # Build
 dist/
 build/
+.next/
+next-env.d.ts
 
 # Environment
 .env

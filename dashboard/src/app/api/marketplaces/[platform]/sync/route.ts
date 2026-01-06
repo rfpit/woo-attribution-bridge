@@ -6,7 +6,7 @@
 
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
-import { drizzleDb } from "@/db";
+import { db } from "@/db";
 import {
   marketplaceConnections,
   marketplaceOrders,
@@ -61,7 +61,7 @@ export async function POST(
     }
 
     // Fetch connection and verify ownership
-    const connections = await drizzleDb
+    const connections = await db
       .select()
       .from(marketplaceConnections)
       .where(
@@ -154,7 +154,7 @@ export async function POST(
     }
 
     // Update last sync time
-    await drizzleDb
+    await db
       .update(marketplaceConnections)
       .set({ lastSyncAt: new Date(), updatedAt: new Date() })
       .where(eq(marketplaceConnections.id, connectionId));
@@ -198,7 +198,7 @@ async function refreshToken(
   );
 
   // Update stored token
-  await drizzleDb
+  await db
     .update(marketplaceConnections)
     .set({
       accessToken,
@@ -216,7 +216,7 @@ async function importOrders(
 ): Promise<void> {
   for (const order of orders) {
     // Check if order already exists
-    const existing = await drizzleDb
+    const existing = await db
       .select({ id: marketplaceOrders.id })
       .from(marketplaceOrders)
       .where(
@@ -229,7 +229,7 @@ async function importOrders(
 
     if (existing.length > 0) {
       // Update existing order
-      await drizzleDb
+      await db
         .update(marketplaceOrders)
         .set({
           status: order.status,
@@ -244,7 +244,7 @@ async function importOrders(
         .where(eq(marketplaceOrders.id, existing[0].id));
     } else {
       // Insert new order
-      await drizzleDb.insert(marketplaceOrders).values({
+      await db.insert(marketplaceOrders).values({
         connectionId,
         externalId: order.externalId,
         orderNumber: order.orderNumber,
@@ -271,7 +271,7 @@ async function importAdSpend(
 ): Promise<void> {
   for (const spend of adSpendData) {
     // Upsert ad spend record
-    const existing = await drizzleDb
+    const existing = await db
       .select({ id: marketplaceAdSpend.id })
       .from(marketplaceAdSpend)
       .where(
@@ -284,7 +284,7 @@ async function importAdSpend(
       .limit(1);
 
     if (existing.length > 0) {
-      await drizzleDb
+      await db
         .update(marketplaceAdSpend)
         .set({
           spend: spend.spend.toString(),
@@ -296,7 +296,7 @@ async function importAdSpend(
         })
         .where(eq(marketplaceAdSpend.id, existing[0].id));
     } else {
-      await drizzleDb.insert(marketplaceAdSpend).values({
+      await db.insert(marketplaceAdSpend).values({
         connectionId,
         platform: spend.platform,
         campaignId: spend.campaignId,

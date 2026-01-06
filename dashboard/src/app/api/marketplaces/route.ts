@@ -7,7 +7,7 @@
 
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
-import { drizzleDb } from "@/db";
+import { db } from "@/db";
 import { marketplaceConnections } from "@/db/schema";
 import { eq } from "drizzle-orm";
 
@@ -18,7 +18,7 @@ export async function GET() {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const connections = await drizzleDb
+    const connections = await db
       .select({
         id: marketplaceConnections.id,
         platform: marketplaceConnections.platform,
@@ -60,7 +60,7 @@ export async function DELETE(request: Request) {
     }
 
     // Verify ownership and delete
-    const result = await drizzleDb
+    const result = await db
       .delete(marketplaceConnections)
       .where(eq(marketplaceConnections.id, connectionId))
       .returning({ id: marketplaceConnections.id });

@@ -79,7 +79,7 @@ export async function handleOrderCreated(
       orderId: order.id.toString(),
       orderNumber: order.order_number?.toString() || order.name,
       email: order.email || "",
-      total: parseFloat(order.total_price),
+      total: order.total_price,
       currency: order.currency,
       clickIds: JSON.stringify(clickIds),
       utmParams: JSON.stringify(utmParams),

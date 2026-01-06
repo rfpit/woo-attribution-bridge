@@ -7,8 +7,9 @@
 
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
-import { drizzleDb } from "@/db";
+import { db } from "@/db";
 import { marketplaceConnections } from "@/db/schema";
+import { and, eq } from "drizzle-orm";
 import {
   createAmazonConnector,
   createEbayConnector,
@@ -120,21 +121,21 @@ export async function GET(
     const tokenExpiresAt = new Date(Date.now() + expiresIn * 1000);
 
     // Check if connection already exists
-    const existing = await drizzleDb
+    const existing = await db
       .select()
       .from(marketplaceConnections)
-      .where((fields, { and, eq }) =>
+      .where(
         and(
-          eq(fields.userId, userId),
-          eq(fields.platform, platform),
-          eq(fields.sellerId, sellerInfo.sellerId),
+          eq(marketplaceConnections.userId, userId),
+          eq(marketplaceConnections.platform, platform),
+          eq(marketplaceConnections.sellerId, sellerInfo.sellerId),
         ),
       )
       .limit(1);
 
     if (existing.length > 0) {
       // Update existing connection
-      await drizzleDb
+      await db
         .update(marketplaceConnections)
         .set({
           accessToken,
@@ -144,10 +145,10 @@ export async function GET(
           status: "active",
           updatedAt: new Date(),
         })
-        .where((fields, { eq }) => eq(fields.id, existing[0].id));
+        .where(eq(marketplaceConnections.id, existing[0].id));
     } else {
       // Create new connection
-      await drizzleDb.insert(marketplaceConnections).values({
+      await db.insert(marketplaceConnections).values({
         userId,
         platform,
         sellerId: sellerInfo.sellerId,

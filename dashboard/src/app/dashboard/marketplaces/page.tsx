@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, Suspense } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
@@ -395,7 +395,7 @@ function MarketplaceCard({
   );
 }
 
-export default function MarketplacesPage() {
+function MarketplacesPageContent() {
   const queryClient = useQueryClient();
   const searchParams = useSearchParams();
   const { toast } = useToast();
@@ -672,6 +672,42 @@ export default function MarketplacesPage() {
             </ul>
           </CardContent>
         </Card>
+      </div>
+    </div>
+  );
+}
+
+export default function MarketplacesPage() {
+  return (
+    <Suspense fallback={<MarketplacesPageLoading />}>
+      <MarketplacesPageContent />
+    </Suspense>
+  );
+}
+
+function MarketplacesPageLoading() {
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-bold">Marketplaces</h1>
+          <p className="text-muted-foreground">
+            Connect Amazon, eBay, and Etsy seller accounts
+          </p>
+        </div>
+      </div>
+      <div className="grid gap-4 md:grid-cols-2">
+        {[...Array(2)].map((_, i) => (
+          <Card key={i}>
+            <CardHeader>
+              <div className="h-6 w-48 bg-muted rounded animate-pulse" />
+              <div className="h-4 w-32 bg-muted rounded animate-pulse" />
+            </CardHeader>
+            <CardContent>
+              <div className="h-4 w-24 bg-muted rounded animate-pulse" />
+            </CardContent>
+          </Card>
+        ))}
       </div>
     </div>
   );

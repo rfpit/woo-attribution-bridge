@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
-import { db } from "@/lib/db";
+import { auth } from "@/auth";
+import { db } from "@/db";
+import { stores } from "@/db/schema";
+import { eq } from "drizzle-orm";
 
 interface Params {
   params: Promise<{ email_hash: string }>;
@@ -9,8 +10,8 @@ interface Params {
 
 export async function GET(request: Request, { params }: Params) {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user?.email) {
+    const session = await auth();
+    if (!session?.user?.id) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
@@ -25,13 +26,12 @@ export async function GET(request: Request, { params }: Params) {
     }
 
     // Get user's stores
-    const stores = await db.store.findMany({
-      where: {
-        userId: session.user.id,
-      },
-    });
+    const userStores = await db
+      .select()
+      .from(stores)
+      .where(eq(stores.userId, session.user.id));
 
-    if (stores.length === 0) {
+    if (userStores.length === 0) {
       return NextResponse.json(
         { error: "No stores connected" },
         { status: 404 },
@@ -40,14 +40,14 @@ export async function GET(request: Request, { params }: Params) {
 
     // For now, use the first store
     // In a multi-store setup, you'd aggregate across stores
-    const store = stores[0];
+    const store = userStores[0];
 
     // Fetch identity data from store's API
     const response = await fetch(
       `${store.url}/wp-json/wab/v1/identity/${email_hash}`,
       {
         headers: {
-          "X-WAB-API-Key": store.apiKey,
+          ...(store.apiKey && { "X-WAB-API-Key": store.apiKey }),
         },
         cache: "no-store",
       },

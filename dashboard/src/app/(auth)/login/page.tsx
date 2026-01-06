@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, Suspense } from "react";
 import { signIn } from "next-auth/react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
@@ -17,7 +17,7 @@ import {
 } from "@/components/ui/card";
 import { Target, Loader2 } from "lucide-react";
 
-export default function LoginPage() {
+function LoginPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [email, setEmail] = useState("");
@@ -164,5 +164,33 @@ export default function LoginPage() {
         </CardFooter>
       </Card>
     </div>
+  );
+}
+
+function LoginPageLoading() {
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-muted p-4">
+      <Card className="w-full max-w-md">
+        <CardHeader className="space-y-1 text-center">
+          <div className="flex items-center justify-center gap-2 mb-4">
+            <Target className="h-8 w-8 text-primary" />
+            <span className="font-bold text-xl">Attribution Bridge</span>
+          </div>
+          <div className="h-8 w-40 mx-auto bg-muted rounded animate-pulse" />
+          <div className="h-4 w-56 mx-auto bg-muted rounded animate-pulse" />
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="h-10 bg-muted rounded animate-pulse" />
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={<LoginPageLoading />}>
+      <LoginPageContent />
+    </Suspense>
   );
 }
