@@ -315,7 +315,7 @@ docker compose -f docker-compose.external-db.yml --env-file .env.docker up -d
 
 Pre-built images are available from GitHub Container Registry:
 ```bash
-docker pull ghcr.io/your-org/woo-attribution-bridge/dashboard:latest
+docker pull ghcr.io/rfpit/woo-attribution-bridge/dashboard:latest
 ```
 
 ### Vercel (Recommended for Serverless)

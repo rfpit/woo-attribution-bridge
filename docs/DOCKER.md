@@ -23,7 +23,7 @@ This guide covers deploying the WooCommerce Attribution Bridge dashboard using D
 
 ```bash
 # Clone the repository
-git clone https://github.com/your-org/woo-attribution-bridge.git
+git clone https://github.com/rfpit/woo-attribution-bridge.git
 cd woo-attribution-bridge
 
 # Copy and configure environment
@@ -129,7 +129,7 @@ Images are automatically built and pushed to GitHub Container Registry.
 ### Pull the Latest Image
 
 ```bash
-docker pull ghcr.io/your-org/woo-attribution-bridge/dashboard:latest
+docker pull ghcr.io/rfpit/woo-attribution-bridge/dashboard:latest
 ```
 
 ### Available Tags
@@ -148,7 +148,7 @@ Edit your compose file to use the pre-built image:
 ```yaml
 services:
   dashboard:
-    image: ghcr.io/your-org/woo-attribution-bridge/dashboard:latest
+    image: ghcr.io/rfpit/woo-attribution-bridge/dashboard:latest
     # Remove build: section when using pre-built
 ```
 
@@ -224,7 +224,7 @@ docker compose version
 mkdir -p /opt/wab && cd /opt/wab
 
 # Clone repository (or copy files)
-git clone https://github.com/your-org/woo-attribution-bridge.git .
+git clone https://github.com/rfpit/woo-attribution-bridge.git .
 
 # Configure environment
 cp .env.docker.example .env.docker
@@ -482,7 +482,7 @@ docker image prune -f
 docker compose down
 
 # Use specific version
-docker compose pull ghcr.io/your-org/woo-attribution-bridge/dashboard:v1.0.0
+docker compose pull ghcr.io/rfpit/woo-attribution-bridge/dashboard:v1.0.0
 
 # Start with previous version
 docker compose up -d
