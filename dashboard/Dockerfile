@@ -56,28 +56,38 @@ ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV PORT=3000
 ENV HOSTNAME="0.0.0.0"
+# Trust the host header when behind a reverse proxy (required for Auth.js v5)
+ENV AUTH_TRUST_HOST=true
 
 # Copy necessary files from builder
 COPY --from=builder /app/public ./public
 COPY --from=builder /app/.next/standalone ./
 COPY --from=builder /app/.next/static ./.next/static
 
-# Copy drizzle for database migrations
-COPY --from=builder /app/drizzle.config.ts ./
-COPY --from=builder /app/src/db ./src/db
-COPY --from=builder --chown=nextjs:nodejs /app/node_modules/drizzle-kit ./node_modules/drizzle-kit
-COPY --from=builder --chown=nextjs:nodejs /app/node_modules/drizzle-orm ./node_modules/drizzle-orm
+# Copy database migrations and migration script
+COPY --from=builder /app/drizzle ./drizzle
+COPY --from=builder /app/src/db/migrate.ts ./src/db/migrate.ts
+COPY --from=builder /app/src/db/schema.ts ./src/db/schema.ts
+
+# Copy tsx for running migrations (production dependency)
+COPY --from=builder /app/node_modules/tsx ./node_modules/tsx
+COPY --from=builder /app/node_modules/esbuild ./node_modules/esbuild
+COPY --from=builder /app/node_modules/get-tsconfig ./node_modules/get-tsconfig
+COPY --from=builder /app/node_modules/resolve-pkg-maps ./node_modules/resolve-pkg-maps
+
+# Copy entrypoint script
+COPY --from=builder /app/docker-entrypoint.sh ./docker-entrypoint.sh
 
 # Set correct permissions
-RUN chown -R nextjs:nodejs /app
+RUN chown -R nextjs:nodejs /app && chmod +x docker-entrypoint.sh
 
 USER nextjs
 
 EXPOSE 3000
 
-# Health check
+# Health check (using wget as it's available in alpine via busybox)
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-  CMD curl -f http://localhost:3000/api/health || exit 1
+  CMD wget -q --spider http://localhost:3000/api/health || exit 1
 
-# Start the application
-CMD ["node", "server.js"]
+# Start the application (entrypoint handles optional migrations)
+ENTRYPOINT ["./docker-entrypoint.sh"]
