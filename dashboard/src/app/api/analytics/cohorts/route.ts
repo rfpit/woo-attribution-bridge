@@ -2,7 +2,15 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { db } from "@/db";
 import { stores, orders } from "@/db/schema";
-import { eq, sql, and, gte } from "drizzle-orm";
+import { eq, sql, and, gte, or, SQL } from "drizzle-orm";
+
+// Helper to create store filter that works around Drizzle UUID array bug
+function storeFilter(storeIds: string[]): SQL {
+  if (storeIds.length === 1) {
+    return eq(orders.storeId, storeIds[0]);
+  }
+  return or(...storeIds.map((id) => eq(orders.storeId, id)))!;
+}
 import {
   buildCohortAnalysis,
   getCohortRetentionMatrix,
@@ -55,12 +63,7 @@ export async function GET(request: Request) {
         attribution: orders.attribution,
       })
       .from(orders)
-      .where(
-        and(
-          sql`${orders.storeId} = ANY(${storeIds})`,
-          gte(orders.dateCreated, startDate),
-        ),
-      );
+      .where(and(storeFilter(storeIds), gte(orders.dateCreated, startDate)));
 
     // Group orders by customer and find first order date
     const customerFirstOrder = new Map<string, Date>();

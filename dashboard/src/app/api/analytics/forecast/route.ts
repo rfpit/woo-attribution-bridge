@@ -2,7 +2,22 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { db } from "@/db";
 import { stores, orders, adSpend, adPlatformConnections } from "@/db/schema";
-import { and, eq, gte, sql } from "drizzle-orm";
+import { and, eq, gte, sql, or, SQL } from "drizzle-orm";
+
+// Helper to create store filter that works around Drizzle UUID array bug
+function storeFilter(storeIds: string[]): SQL {
+  if (storeIds.length === 1) {
+    return eq(orders.storeId, storeIds[0]);
+  }
+  return or(...storeIds.map((id) => eq(orders.storeId, id)))!;
+}
+
+function connectionFilter(connectionIds: string[]): SQL {
+  if (connectionIds.length === 1) {
+    return eq(adSpend.connectionId, connectionIds[0]);
+  }
+  return or(...connectionIds.map((id) => eq(adSpend.connectionId, id)))!;
+}
 import {
   forecastRevenue,
   recommendAdSpend,
@@ -55,12 +70,7 @@ export async function GET(request: Request) {
         total: sql<number>`SUM(CAST(${orders.total} AS DECIMAL))`,
       })
       .from(orders)
-      .where(
-        and(
-          sql`${orders.storeId} = ANY(${storeIds})`,
-          gte(orders.dateCreated, startDate),
-        ),
-      )
+      .where(and(storeFilter(storeIds), gte(orders.dateCreated, startDate)))
       .groupBy(sql`DATE_TRUNC(${periodType}, ${orders.dateCreated})`)
       .orderBy(sql`DATE_TRUNC(${periodType}, ${orders.dateCreated})`);
 
@@ -96,10 +106,7 @@ export async function GET(request: Request) {
         })
         .from(adSpend)
         .where(
-          and(
-            sql`${adSpend.connectionId} = ANY(${connectionIds})`,
-            gte(adSpend.date, startDate),
-          ),
+          and(connectionFilter(connectionIds), gte(adSpend.date, startDate)),
         )
         .groupBy(sql`DATE_TRUNC(${periodType}, ${adSpend.date})`)
         .orderBy(sql`DATE_TRUNC(${periodType}, ${adSpend.date})`);

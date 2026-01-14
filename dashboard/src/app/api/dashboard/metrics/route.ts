@@ -2,7 +2,16 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { db } from "@/db";
 import { stores, orders, adSpend, adPlatformConnections } from "@/db/schema";
-import { eq, sql, and, gte, lte } from "drizzle-orm";
+import { eq, sql, and, gte, lte, inArray, or } from "drizzle-orm";
+
+// Helper to create store filter that works around Drizzle UUID array bug
+function storeFilter(storeIds: string[]) {
+  if (storeIds.length === 1) {
+    return eq(orders.storeId, storeIds[0]);
+  }
+  // For multiple stores, use OR chain instead of inArray
+  return or(...storeIds.map((id) => eq(orders.storeId, id)))!;
+}
 
 export async function GET() {
   try {
@@ -45,7 +54,7 @@ export async function GET() {
       .from(orders)
       .where(
         and(
-          sql`${orders.storeId} = ANY(${storeIds})`,
+          storeFilter(storeIds),
           gte(orders.dateCreated, thirtyDaysAgo),
           lte(orders.dateCreated, now),
         ),
@@ -62,7 +71,7 @@ export async function GET() {
       .from(orders)
       .where(
         and(
-          sql`${orders.storeId} = ANY(${storeIds})`,
+          storeFilter(storeIds),
           gte(orders.dateCreated, sixtyDaysAgo),
           lte(orders.dateCreated, thirtyDaysAgo),
         ),
@@ -87,7 +96,7 @@ export async function GET() {
         .from(adSpend)
         .where(
           and(
-            sql`${adSpend.connectionId} = ANY(${connectionIds})`,
+            inArray(adSpend.connectionId, connectionIds),
             gte(adSpend.date, thirtyDaysAgo),
             lte(adSpend.date, now),
           ),
@@ -101,7 +110,7 @@ export async function GET() {
         .from(adSpend)
         .where(
           and(
-            sql`${adSpend.connectionId} = ANY(${connectionIds})`,
+            inArray(adSpend.connectionId, connectionIds),
             gte(adSpend.date, sixtyDaysAgo),
             lte(adSpend.date, thirtyDaysAgo),
           ),
@@ -118,7 +127,7 @@ export async function GET() {
       .from(orders)
       .where(
         and(
-          sql`${orders.storeId} = ANY(${storeIds})`,
+          storeFilter(storeIds),
           gte(orders.dateCreated, thirtyDaysAgo),
           sql`${orders.attribution}::text != 'null'`,
           sql`${orders.attribution}::text != '{}'`,

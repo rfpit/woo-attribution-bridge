@@ -2,7 +2,15 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { db } from "@/db";
 import { stores, orders } from "@/db/schema";
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, sql, or, SQL } from "drizzle-orm";
+
+// Helper to create store filter that works around Drizzle UUID array bug
+function storeFilter(storeIds: string[]): SQL {
+  if (storeIds.length === 1) {
+    return eq(orders.storeId, storeIds[0]);
+  }
+  return or(...storeIds.map((id) => eq(orders.storeId, id)))!;
+}
 import {
   predictLTV,
   getLTVBySource,
@@ -55,7 +63,7 @@ export async function GET(request: Request) {
         avgOrderValue: sql<number>`AVG(CAST(${orders.total} AS DECIMAL))`,
       })
       .from(orders)
-      .where(sql`${orders.storeId} = ANY(${storeIds})`)
+      .where(storeFilter(storeIds))
       .groupBy(orders.customerEmailHash)
       .limit(limit * 2); // Fetch more to ensure we have enough after filtering
 
@@ -66,9 +74,7 @@ export async function GET(request: Request) {
         attribution: orders.attribution,
       })
       .from(orders)
-      .where(
-        and(sql`${orders.storeId} = ANY(${storeIds})`, orders.isNewCustomer),
-      );
+      .where(and(storeFilter(storeIds), eq(orders.isNewCustomer, true)));
 
     // Build source map
     const sourceMap = new Map<string, string>();

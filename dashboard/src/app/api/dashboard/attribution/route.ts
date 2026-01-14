@@ -2,8 +2,16 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { db } from "@/db";
 import { orders, stores } from "@/db/schema";
-import { eq, and, gte, sql } from "drizzle-orm";
+import { eq, and, gte, sql, or } from "drizzle-orm";
 import { subDays } from "date-fns";
+
+// Helper to create store filter that works around Drizzle UUID array bug
+function storeFilter(storeIds: string[]) {
+  if (storeIds.length === 1) {
+    return eq(orders.storeId, storeIds[0]);
+  }
+  return or(...storeIds.map((id) => eq(orders.storeId, id)))!;
+}
 
 interface AttributionData {
   first_touch?: { source: string; weight: number };
@@ -83,7 +91,7 @@ export async function GET(request: Request) {
       .from(orders)
       .where(
         and(
-          sql`${orders.storeId} = ANY(${storeIds})`,
+          storeFilter(storeIds),
           gte(orders.dateCreated, startDate),
           sql`${orders.attribution} IS NOT NULL`,
         ),
