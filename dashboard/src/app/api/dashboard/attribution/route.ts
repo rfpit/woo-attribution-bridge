@@ -118,7 +118,7 @@ export async function GET(request: Request) {
       }
 
       // First touch attribution
-      if (attribution.first_touch) {
+      if (attribution.first_touch?.source) {
         const source = attribution.first_touch.source;
         if (!sourceData[source]) {
           sourceData[source] = {
@@ -137,7 +137,7 @@ export async function GET(request: Request) {
       }
 
       // Last touch attribution
-      if (attribution.last_touch) {
+      if (attribution.last_touch?.source) {
         const source = attribution.last_touch.source;
         if (!sourceData[source]) {
           sourceData[source] = {
@@ -156,6 +156,7 @@ export async function GET(request: Request) {
       // Linear attribution
       if (attribution.linear) {
         for (const item of attribution.linear) {
+          if (!item.source) continue;
           const source = item.source;
           if (!sourceData[source]) {
             sourceData[source] = {
@@ -175,6 +176,7 @@ export async function GET(request: Request) {
       // Position-based attribution
       if (attribution.position_based) {
         for (const item of attribution.position_based) {
+          if (!item.source) continue;
           const source = item.source;
           if (!sourceData[source]) {
             sourceData[source] = {

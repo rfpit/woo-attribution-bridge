@@ -87,7 +87,8 @@ function formatCurrency(value: number): string {
   }).format(value);
 }
 
-function formatSourceName(source: string): string {
+function formatSourceName(source: string | undefined | null): string {
+  if (!source) return "Unknown";
   return (
     SOURCE_LABELS[source] || source.charAt(0).toUpperCase() + source.slice(1)
   );
