@@ -37,6 +37,10 @@ COPY . .
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV NODE_ENV=production
 
+# Build date is embedded in the bundle for version tracking
+ARG BUILD_DATE
+ENV NEXT_PUBLIC_BUILD_DATE=${BUILD_DATE}
+
 # Build the application with standalone output
 RUN npm run build
 

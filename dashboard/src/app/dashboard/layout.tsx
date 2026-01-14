@@ -15,6 +15,7 @@ import {
   Users,
   Package,
   BarChart3,
+  ShoppingCart,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -28,6 +29,7 @@ import { cn } from "@/lib/utils";
 
 const navigation = [
   { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
+  { name: "Orders", href: "/dashboard/orders", icon: ShoppingCart },
   { name: "Attribution", href: "/dashboard/attribution", icon: GitBranch },
   { name: "Analytics", href: "/dashboard/analytics", icon: BarChart3 },
   { name: "Marketing", href: "/dashboard/marketing", icon: Target },
@@ -117,6 +119,9 @@ export default function DashboardLayout({
       {/* Main content */}
       <main className="pl-64">
         <div className="p-8">{children}</div>
+        <div className="fixed bottom-2 right-2 text-xs text-muted-foreground/50">
+          Build: {process.env.NEXT_PUBLIC_BUILD_DATE || "dev"}
+        </div>
       </main>
     </div>
   );
