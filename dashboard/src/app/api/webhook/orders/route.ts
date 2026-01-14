@@ -19,10 +19,10 @@ const orderSchema = z.object({
   is_new_customer: z.boolean().default(true),
   payment_method: z.string().optional(),
   attribution: z.record(z.unknown()).nullable().optional(),
-  survey_response: z.string().optional(),
-  survey_source: z.string().optional(),
+  survey_response: z.string().nullable().optional(),
+  survey_source: z.string().nullable().optional(),
   date_created: z.string(),
-  date_completed: z.string().optional(),
+  date_completed: z.string().nullable().optional(),
 });
 
 const webhookPayloadSchema = z.object({
