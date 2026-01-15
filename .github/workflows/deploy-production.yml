@@ -220,10 +220,9 @@ jobs:
       - name: Deploy plugin via rsync
         env:
           HOST: ${{ secrets.WP_PRODUCTION_HOST }}
-          SITE: ${{ secrets.WP_PRODUCTION_SITE }}
+          WP_PATH: ${{ secrets.WP_PRODUCTION_PATH }}
         run: |
-          PLUGIN_PATH="/home/cloudpanel/htdocs/${SITE}"
-          PLUGIN_PATH="${PLUGIN_PATH}/wp-content/plugins/woo-attribution-bridge"
+          PLUGIN_PATH="${WP_PATH}/wp-content/plugins/woo-attribution-bridge"
 
           # Ensure plugin directory exists
           ssh root@${HOST} "mkdir -p ${PLUGIN_PATH}"
