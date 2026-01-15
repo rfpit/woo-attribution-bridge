@@ -171,6 +171,9 @@ jobs:
           PLUGIN_PATH="/home/cloudpanel/htdocs/${SITE}"
           PLUGIN_PATH="${PLUGIN_PATH}/wp-content/plugins/woo-attribution-bridge"
 
+          # Ensure plugin directory exists
+          ssh root@${HOST} "mkdir -p ${PLUGIN_PATH}"
+
           rsync -avz --delete \
             --exclude '.git' \
             --exclude 'tests' \
