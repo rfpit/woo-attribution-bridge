@@ -1,0 +1,83 @@
+---
+# Docker Compose - Production Environment
+#
+# Deploys dashboard to port 3001 with production-specific configuration
+# Uses GHCR image tagged with 'latest'
+#
+# Usage:
+#   docker compose -f docker-compose.production.yml up -d
+
+services:
+  # PostgreSQL Database (Production)
+  postgres:
+    image: postgres:16-alpine
+    container_name: wab-prod-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-wab}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+      POSTGRES_DB: ${POSTGRES_DB:-wab_production}
+    volumes:
+      - wab_prod_postgres:/var/lib/postgresql/data
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - pg_isready -U ${POSTGRES_USER:-wab} -d ${POSTGRES_DB:-wab_production}
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - wab-production
+
+  # Next.js Dashboard (Production)
+  dashboard:
+    image: ghcr.io/rfpit/woo-attribution-bridge/dashboard:latest
+    container_name: wab-prod-dashboard
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      # Database
+      DATABASE_URL: >-
+        postgresql://${POSTGRES_USER:-wab}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-wab_production}
+
+      # NextAuth
+      NEXTAUTH_SECRET: ${NEXTAUTH_SECRET:?NEXTAUTH_SECRET is required}
+      NEXTAUTH_URL: ${NEXTAUTH_URL:-https://wab.cloud.rfp.onl}
+
+      # Google OAuth (optional)
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+
+      # Node environment
+      NODE_ENV: production
+
+      # Auth.js v5 trust host header
+      AUTH_TRUST_HOST: "true"
+
+      # Run migrations on startup
+      RUN_MIGRATIONS: ${RUN_MIGRATIONS:-true}
+    ports:
+      - "3000:3000"
+    healthcheck:
+      test:
+        - CMD
+        - wget
+        - "-q"
+        - "--spider"
+        - "http://localhost:3000/api/health"
+      interval: 30s
+      timeout: 10s
+      start_period: 30s
+      retries: 3
+    networks:
+      - wab-production
+
+volumes:
+  wab_prod_postgres:
+    driver: local
+
+networks:
+  wab-production:
+    driver: bridge

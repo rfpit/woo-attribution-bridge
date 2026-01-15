@@ -1,0 +1,64 @@
+---
+name: "Connect to WireGuard"
+description: "Establishes WireGuard VPN connection to internal network"
+
+inputs:
+  private-key:
+    description: "WireGuard private key"
+    required: true
+  endpoint:
+    description: "WireGuard server endpoint (host:port)"
+    required: true
+  server-public-key:
+    description: "WireGuard server public key"
+    required: true
+  client-address:
+    description: "Client WireGuard IP address (e.g., 10.0.1.100/32)"
+    required: true
+  allowed-ips:
+    description: "Allowed IPs to route through WireGuard"
+    required: false
+    default: "10.0.1.0/24"
+
+runs:
+  using: "composite"
+  steps:
+    - name: Install WireGuard
+      shell: bash
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y wireguard
+
+    - name: Configure WireGuard
+      shell: bash
+      run: |
+        cat << EOF | sudo tee /etc/wireguard/wg0.conf
+        [Interface]
+        PrivateKey = ${{ inputs.private-key }}
+        Address = ${{ inputs.client-address }}
+
+        [Peer]
+        PublicKey = ${{ inputs.server-public-key }}
+        Endpoint = ${{ inputs.endpoint }}
+        AllowedIPs = ${{ inputs.allowed-ips }}
+        PersistentKeepalive = 25
+        EOF
+        sudo chmod 600 /etc/wireguard/wg0.conf
+
+    - name: Start WireGuard
+      shell: bash
+      run: sudo wg-quick up wg0
+
+    - name: Verify Connection
+      shell: bash
+      run: |
+        echo "WireGuard interface status:"
+        sudo wg show
+        echo ""
+        echo "Testing connectivity..."
+        # Extract first IP from allowed-ips for ping test
+        ALLOWED="${{ inputs.allowed-ips }}"
+        FIRST_IP=$(echo "$ALLOWED" | cut -d'/' -f1 | cut -d',' -f1)
+        # Try to ping gateway (usually .1)
+        GATEWAY=$(echo "$FIRST_IP" | sed 's/\.[0-9]*$/.1/')
+        ping -c 2 "$GATEWAY" || echo "Gateway ping failed"

@@ -75,9 +75,12 @@ COPY --from=builder /app/src/db/schema.ts ./src/db/schema.ts
 
 # Copy tsx for running migrations (production dependency)
 COPY --from=builder /app/node_modules/tsx ./node_modules/tsx
-COPY --from=builder /app/node_modules/esbuild ./node_modules/esbuild
 COPY --from=builder /app/node_modules/get-tsconfig ./node_modules/get-tsconfig
 COPY --from=builder /app/node_modules/resolve-pkg-maps ./node_modules/resolve-pkg-maps
+
+# Install esbuild for current platform (needed by tsx for migrations)
+# This ensures we get the correct platform-specific binary
+RUN npm install --no-save esbuild
 
 # Copy entrypoint script
 COPY --from=builder /app/docker-entrypoint.sh ./docker-entrypoint.sh
