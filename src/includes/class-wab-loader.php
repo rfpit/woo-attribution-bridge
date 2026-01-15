@@ -155,6 +155,11 @@ class WAB_Loader {
 			$integrations['swetrix'] = new WAB_Swetrix();
 		}
 
+		// Dashboard integration (sends to central WAB dashboard).
+		if ( get_option( 'wab_dashboard_enabled' ) ) {
+			$integrations['dashboard'] = new WAB_Dashboard();
+		}
+
 		return $integrations;
 	}
 

@@ -294,4 +294,54 @@ class QueueTest extends WabTestCase {
 
 		$this->assertFalse( $result );
 	}
+
+	/**
+	 * Test add calculates next_retry using first interval.
+	 */
+	public function test_add_calculates_next_retry(): void {
+		$this->wpdb->insert_id = 1;
+
+		$this->wpdb->shouldReceive( 'insert' )
+			->once()
+			->with(
+				'wp_wab_queue',
+				Mockery::on( function( $data ) {
+					// next_retry should be set approximately now + 60 seconds.
+					$expected_time = gmdate( 'Y-m-d H:i', time() + 60 );
+					$actual_time   = substr( $data['next_retry'], 0, 16 );
+					return $actual_time === $expected_time;
+				} ),
+				Mockery::any()
+			)
+			->andReturn( 1 );
+
+		$queue = new WAB_Queue();
+		$queue->add( 123, 'meta', [ 'test' => 'data' ] );
+
+		$this->assertTrue( true );
+	}
+
+	/**
+	 * Test retry intervals are exponential.
+	 */
+	public function test_retry_intervals_exponential(): void {
+		global $wab_test_options;
+		$intervals = $wab_test_options['wab_queue_retry_intervals'];
+
+		// Each interval should be greater than the previous.
+		for ( $i = 1; $i < count( $intervals ); $i++ ) {
+			$this->assertGreaterThan(
+				$intervals[ $i - 1 ],
+				$intervals[ $i ],
+				"Interval $i should be greater than interval " . ( $i - 1 )
+			);
+		}
+
+		// Verify the actual values match expected.
+		$this->assertEquals( 60, $intervals[0] );      // 1 minute
+		$this->assertEquals( 300, $intervals[1] );     // 5 minutes
+		$this->assertEquals( 1800, $intervals[2] );    // 30 minutes
+		$this->assertEquals( 7200, $intervals[3] );    // 2 hours
+		$this->assertEquals( 43200, $intervals[4] );   // 12 hours
+	}
 }

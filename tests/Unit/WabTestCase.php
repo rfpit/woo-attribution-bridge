@@ -151,6 +151,22 @@ abstract class WabTestCase extends TestCase {
 
 		Functions\when( 'get_locale' )->justReturn( 'en_US' );
 
+		Functions\when( 'get_bloginfo' )->alias( function( $show = '' ) {
+			switch ( $show ) {
+				case 'name':
+					return 'Test Site';
+				case 'url':
+				case 'wpurl':
+					return 'https://example.com';
+				case 'version':
+					return '6.4.2';
+				default:
+					return '';
+			}
+		} );
+
+		Functions\when( 'wp_timezone_string' )->justReturn( 'UTC' );
+
 		Functions\when( 'apply_filters' )->alias( function( $hook, $value, ...$args ) {
 			return $value;
 		} );

@@ -35,6 +35,18 @@ interface SourceBreakdown {
   positionBased: number;
 }
 
+interface TimeToConversionBucket {
+  bucket: string;
+  orders: number;
+  revenue: number;
+}
+
+interface JourneyPatterns {
+  singleTouch: { orders: number; revenue: number };
+  multiTouch: { orders: number; revenue: number };
+  avgTouchpointsMulti: number;
+}
+
 interface AttributionResponse {
   sources: SourceBreakdown[];
   models: {
@@ -46,6 +58,13 @@ interface AttributionResponse {
   touchpointDistribution: Array<{ touchpoints: number; orders: number }>;
   averageTouchpoints: number;
   totalOrdersWithAttribution: number;
+  timeToConversion: {
+    average: number;
+    median: number;
+    distribution: TimeToConversionBucket[];
+    ordersWithData: number;
+  };
+  journeyPatterns: JourneyPatterns;
 }
 
 const COLORS = [
@@ -92,6 +111,23 @@ function formatSourceName(source: string | undefined | null): string {
   return (
     SOURCE_LABELS[source] || source.charAt(0).toUpperCase() + source.slice(1)
   );
+}
+
+function formatDays(days: number): string {
+  if (days < 1) {
+    const hours = Math.round(days * 24);
+    if (hours < 1) {
+      const minutes = Math.round(days * 24 * 60);
+      return `${minutes} min`;
+    }
+    return `${hours} hour${hours !== 1 ? "s" : ""}`;
+  }
+  if (days < 7) {
+    const rounded = Math.round(days * 10) / 10;
+    return `${rounded} day${rounded !== 1 ? "s" : ""}`;
+  }
+  const weeks = Math.round((days / 7) * 10) / 10;
+  return `${weeks} week${weeks !== 1 ? "s" : ""}`;
 }
 
 export default function AttributionPage() {
@@ -404,6 +440,105 @@ export default function AttributionPage() {
         </TabsContent>
 
         <TabsContent value="journey" className="space-y-6">
+          {/* Time to Conversion */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Time to Conversion</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid md:grid-cols-4 gap-4 mb-6">
+                <div className="p-4 bg-blue-50 rounded-lg">
+                  <div className="text-sm text-muted-foreground">
+                    Average Time
+                  </div>
+                  <div className="text-xl font-bold text-blue-700">
+                    {data?.timeToConversion?.average
+                      ? formatDays(data.timeToConversion.average)
+                      : "N/A"}
+                  </div>
+                </div>
+                <div className="p-4 bg-green-50 rounded-lg">
+                  <div className="text-sm text-muted-foreground">
+                    Median Time
+                  </div>
+                  <div className="text-xl font-bold text-green-700">
+                    {data?.timeToConversion?.median
+                      ? formatDays(data.timeToConversion.median)
+                      : "N/A"}
+                  </div>
+                </div>
+                <div className="p-4 bg-purple-50 rounded-lg">
+                  <div className="text-sm text-muted-foreground">
+                    Same-Day Conversions
+                  </div>
+                  <div className="text-xl font-bold text-purple-700">
+                    {(() => {
+                      const sameDayOrders =
+                        (data?.timeToConversion?.distribution?.find(
+                          (d) => d.bucket === "<1 hour",
+                        )?.orders || 0) +
+                        (data?.timeToConversion?.distribution?.find(
+                          (d) => d.bucket === "1-24 hours",
+                        )?.orders || 0);
+                      const total = data?.timeToConversion?.ordersWithData || 0;
+                      return total > 0
+                        ? `${Math.round((sameDayOrders / total) * 100)}%`
+                        : "N/A";
+                    })()}
+                  </div>
+                </div>
+                <div className="p-4 bg-orange-50 rounded-lg">
+                  <div className="text-sm text-muted-foreground">
+                    Long Journey (30+ days)
+                  </div>
+                  <div className="text-xl font-bold text-orange-700">
+                    {(() => {
+                      const longOrders =
+                        data?.timeToConversion?.distribution?.find(
+                          (d) => d.bucket === "30+ days",
+                        )?.orders || 0;
+                      const total = data?.timeToConversion?.ordersWithData || 0;
+                      return total > 0
+                        ? `${Math.round((longOrders / total) * 100)}%`
+                        : "N/A";
+                    })()}
+                  </div>
+                </div>
+              </div>
+              <div className="h-[300px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart
+                    data={data?.timeToConversion?.distribution || []}
+                    layout="vertical"
+                    margin={{ top: 5, right: 30, left: 100, bottom: 5 }}
+                  >
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis type="number" />
+                    <YAxis type="category" dataKey="bucket" width={90} />
+                    <Tooltip
+                      formatter={(value: number, name: string) => [
+                        name === "orders"
+                          ? `${value} orders`
+                          : formatCurrency(value),
+                        name === "orders" ? "Orders" : "Revenue",
+                      ]}
+                    />
+                    <Legend />
+                    <Bar dataKey="orders" fill="#3b82f6" name="Orders" />
+                    <Bar dataKey="revenue" fill="#10b981" name="Revenue" />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+              <p className="text-sm text-muted-foreground mt-4">
+                Shows how long customers take from their first marketing
+                touchpoint to completing a purchase. Shorter times indicate
+                high-intent traffic; longer journeys may need nurturing
+                strategies.
+              </p>
+            </CardContent>
+          </Card>
+
+          {/* Touchpoint Distribution */}
           <Card>
             <CardHeader>
               <CardTitle>Touchpoint Distribution</CardTitle>
@@ -431,42 +566,108 @@ export default function AttributionPage() {
                       }}
                     />
                     <Tooltip />
-                    <Bar dataKey="orders" fill="#3b82f6" name="Orders" />
+                    <Bar dataKey="orders" fill="#8b5cf6" name="Orders" />
                   </BarChart>
                 </ResponsiveContainer>
               </div>
-              <div className="mt-6 grid md:grid-cols-3 gap-4">
-                <div className="p-4 bg-gray-50 rounded-lg">
-                  <div className="text-sm text-muted-foreground">
-                    Single Touchpoint Orders
-                  </div>
-                  <div className="text-xl font-bold">
-                    {data?.touchpointDistribution.find(
-                      (d) => d.touchpoints === 1,
-                    )?.orders || 0}
-                  </div>
-                </div>
-                <div className="p-4 bg-gray-50 rounded-lg">
-                  <div className="text-sm text-muted-foreground">
-                    Multi-Touch Orders
-                  </div>
-                  <div className="text-xl font-bold">
-                    {(data?.touchpointDistribution || [])
-                      .filter((d) => d.touchpoints > 1)
-                      .reduce((sum, d) => sum + d.orders, 0)}
-                  </div>
-                </div>
-                <div className="p-4 bg-gray-50 rounded-lg">
-                  <div className="text-sm text-muted-foreground">
-                    Avg Journey Length
-                  </div>
-                  <div className="text-xl font-bold">
-                    {data?.averageTouchpoints.toFixed(1) || "0"} touchpoints
-                  </div>
-                </div>
-              </div>
             </CardContent>
           </Card>
+
+          {/* Journey Pattern Stats */}
+          <div className="grid md:grid-cols-2 gap-6">
+            <Card>
+              <CardHeader>
+                <CardTitle>Single vs Multi-Touch Journeys</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4">
+                  <div className="flex justify-between items-center p-4 bg-gray-50 rounded-lg">
+                    <div>
+                      <div className="font-medium">Single Touchpoint</div>
+                      <div className="text-sm text-muted-foreground">
+                        Direct converters
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <div className="text-xl font-bold">
+                        {data?.journeyPatterns?.singleTouch?.orders || 0} orders
+                      </div>
+                      <div className="text-sm text-muted-foreground">
+                        {formatCurrency(
+                          data?.journeyPatterns?.singleTouch?.revenue || 0,
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex justify-between items-center p-4 bg-gray-50 rounded-lg">
+                    <div>
+                      <div className="font-medium">Multi-Touch</div>
+                      <div className="text-sm text-muted-foreground">
+                        Avg{" "}
+                        {data?.journeyPatterns?.avgTouchpointsMulti?.toFixed(
+                          1,
+                        ) || 0}{" "}
+                        touchpoints
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <div className="text-xl font-bold">
+                        {data?.journeyPatterns?.multiTouch?.orders || 0} orders
+                      </div>
+                      <div className="text-sm text-muted-foreground">
+                        {formatCurrency(
+                          data?.journeyPatterns?.multiTouch?.revenue || 0,
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Journey Insights</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4">
+                  <div className="p-4 bg-blue-50 rounded-lg">
+                    <div className="text-sm text-muted-foreground">
+                      Avg Journey Length
+                    </div>
+                    <div className="text-xl font-bold text-blue-700">
+                      {data?.averageTouchpoints?.toFixed(1) || "0"} touchpoints
+                    </div>
+                  </div>
+                  <div className="p-4 bg-green-50 rounded-lg">
+                    <div className="text-sm text-muted-foreground">
+                      Multi-Touch Revenue Share
+                    </div>
+                    <div className="text-xl font-bold text-green-700">
+                      {(() => {
+                        const multiRevenue =
+                          data?.journeyPatterns?.multiTouch?.revenue || 0;
+                        const singleRevenue =
+                          data?.journeyPatterns?.singleTouch?.revenue || 0;
+                        const total = multiRevenue + singleRevenue;
+                        return total > 0
+                          ? `${Math.round((multiRevenue / total) * 100)}%`
+                          : "N/A";
+                      })()}
+                    </div>
+                  </div>
+                  <div className="p-4 bg-purple-50 rounded-lg">
+                    <div className="text-sm text-muted-foreground">
+                      Orders with Time Data
+                    </div>
+                    <div className="text-xl font-bold text-purple-700">
+                      {data?.timeToConversion?.ordersWithData || 0}
+                    </div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
         </TabsContent>
       </Tabs>
     </div>

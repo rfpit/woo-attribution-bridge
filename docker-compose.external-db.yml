@@ -35,13 +35,17 @@ services:
 
       # Node environment
       NODE_ENV: production
+
+      # Run database migrations on startup (set to true for first run)
+      RUN_MIGRATIONS: ${RUN_MIGRATIONS:-false}
     ports:
       - "${DASHBOARD_PORT:-3000}:3000"
     healthcheck:
       test:
         - CMD
-        - curl
-        - "-f"
+        - wget
+        - "-q"
+        - "--spider"
         - "http://localhost:3000/api/health"
       interval: 30s
       timeout: 10s

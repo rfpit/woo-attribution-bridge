@@ -569,10 +569,23 @@ class WAB_REST_API {
 	 * @return WP_REST_Response
 	 */
 	public function health_check( WP_REST_Request $request ): WP_REST_Response {
+		// Check if dashboard connection is configured.
+		$dashboard_enabled = get_option( 'wab_dashboard_enabled' );
+		$has_api_key = ! empty( get_option( 'wab_api_key' ) );
+
 		return new WP_REST_Response( [
 			'status'      => 'ok',
 			'timestamp'   => current_time( 'c' ),
 			'wab_version' => defined( 'WAB_VERSION' ) ? WAB_VERSION : '1.0.0',
+			'wc_version'  => defined( 'WC_VERSION' ) ? WC_VERSION : 'unknown',
+			'site_url'    => home_url(),
+			'site_name'   => get_bloginfo( 'name' ),
+			'timezone'    => wp_timezone_string(),
+			'currency'    => function_exists( 'get_woocommerce_currency' ) ? get_woocommerce_currency() : 'USD',
+			'dashboard'   => [
+				'enabled'  => (bool) $dashboard_enabled,
+				'api_key'  => $has_api_key,
+			],
 		] );
 	}
 

@@ -83,6 +83,19 @@ async function deleteStore(id: string): Promise<void> {
   }
 }
 
+async function syncStore(
+  id: string,
+): Promise<{ success: boolean; status: string; message: string }> {
+  const response = await fetch(`/api/stores/${id}/sync`, {
+    method: "POST",
+  });
+  const data = await response.json();
+  if (!response.ok) {
+    throw new Error(data.error || "Failed to sync store");
+  }
+  return data;
+}
+
 function StatusBadge({ status }: { status: string }) {
   const styles: Record<string, string> = {
     active:
@@ -161,7 +174,7 @@ function AddStoreDialog() {
   const mutation = useMutation({
     mutationFn: createStore,
     onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: ["stores"] });
+      // Set API key first - don't invalidate queries yet or the dialog will flash
       setApiKey(data.store.apiKey || "");
       toast({
         title: "Store created",
@@ -218,6 +231,10 @@ function AddStoreDialog() {
   };
 
   const handleClose = () => {
+    // Invalidate queries when closing to refresh the stores list
+    if (apiKey) {
+      queryClient.invalidateQueries({ queryKey: ["stores"] });
+    }
     setOpen(false);
     setName("");
     setUrl("");
@@ -413,12 +430,37 @@ function AddStoreDialog() {
 function StoreCard({
   store,
   onDelete,
+  onSync,
 }: {
   store: StoreData;
   onDelete: (id: string) => void;
+  onSync: () => void;
 }) {
   const [isDeleting, setIsDeleting] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(false);
   const { toast } = useToast();
+
+  const handleSync = async () => {
+    setIsSyncing(true);
+    try {
+      const result = await syncStore(store.id);
+      toast({
+        title: result.success ? "Connection verified" : "Connection issue",
+        description: result.message,
+        variant: result.success ? "default" : "destructive",
+      });
+      onSync(); // Refresh the stores list
+    } catch (error) {
+      toast({
+        title: "Sync failed",
+        description:
+          error instanceof Error ? error.message : "Failed to sync store",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSyncing(false);
+    }
+  };
 
   const handleDelete = async () => {
     if (
@@ -488,8 +530,18 @@ function StoreCard({
               : "Never synced"}
           </div>
           <div className="flex gap-2">
-            <Button variant="ghost" size="sm" disabled>
-              <RefreshCw className="h-4 w-4" />
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={handleSync}
+              disabled={isSyncing}
+              title="Test connection"
+            >
+              {isSyncing ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <RefreshCw className="h-4 w-4" />
+              )}
             </Button>
             <Button
               variant="ghost"
@@ -650,6 +702,9 @@ function StoresPageContent() {
               key={store.id}
               store={store}
               onDelete={handleStoreDeleted}
+              onSync={() =>
+                queryClient.invalidateQueries({ queryKey: ["stores"] })
+              }
             />
           ))}
         </div>
@@ -677,8 +732,7 @@ function StoresPageContent() {
                 Install and activate the plugin in your WordPress admin panel
               </li>
               <li>
-                Go to{" "}
-                <strong>WooCommerce → Settings → Attribution Bridge</strong>
+                Go to <strong>Attribution → Settings → Dashboard</strong>
               </li>
               <li>Enter your API key and Dashboard URL</li>
               <li>Click Save Changes and the plugin will start syncing data</li>
