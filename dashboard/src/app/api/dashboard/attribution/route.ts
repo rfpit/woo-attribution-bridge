@@ -13,9 +13,20 @@ function storeFilter(storeIds: string[]) {
   return or(...storeIds.map((id) => eq(orders.storeId, id)))!;
 }
 
+interface TouchpointData {
+  source?: string;
+  weight?: number;
+  timestamp?: string | number;
+  gclid?: string;
+  fbclid?: string;
+  ttclid?: string;
+  msclkid?: string;
+  utm_source?: string;
+}
+
 interface MultiTouchData {
-  first_touch?: { source: string; weight: number };
-  last_touch?: { source: string; weight: number };
+  first_touch?: TouchpointData;
+  last_touch?: TouchpointData;
   linear?: Array<{ source: string; weight: number }>;
   position_based?: Array<{ source: string; weight: number }>;
   time_decay?: Array<{ source: string; weight: number }>;
@@ -26,12 +37,18 @@ interface AttributionData {
   // New nested structure from WordPress plugin
   multi_touch?: MultiTouchData;
   // Legacy flat structure (for backwards compatibility)
-  first_touch?: { source: string; weight: number };
-  last_touch?: { source: string; weight: number };
+  first_touch?: TouchpointData;
+  last_touch?: TouchpointData;
   linear?: Array<{ source: string; weight: number }>;
   position_based?: Array<{ source: string; weight: number }>;
   time_decay?: Array<{ source: string; weight: number }>;
   touchpoint_count?: number;
+  // Raw click IDs at root level
+  gclid?: string;
+  fbclid?: string;
+  ttclid?: string;
+  msclkid?: string;
+  utm?: { utm_source?: string };
   touchpoints?: Array<{
     timestamp: string;
     source: string;
@@ -42,6 +59,23 @@ interface AttributionData {
     utm_medium?: string;
     utm_campaign?: string;
   }>;
+}
+
+// Derive source from click IDs when source field is not present
+function deriveSource(touchpoint: TouchpointData | undefined): string | null {
+  if (!touchpoint) return null;
+
+  // If source is explicitly set, use it
+  if (touchpoint.source) return touchpoint.source;
+
+  // Derive from click IDs (priority order)
+  if (touchpoint.gclid) return "google_ads";
+  if (touchpoint.fbclid) return "meta_ads";
+  if (touchpoint.ttclid) return "tiktok_ads";
+  if (touchpoint.msclkid) return "microsoft_ads";
+  if (touchpoint.utm_source) return touchpoint.utm_source;
+
+  return null;
 }
 
 interface SourceBreakdown {
@@ -136,11 +170,11 @@ export async function GET(request: Request) {
 
       // First touch attribution
       const firstTouch = multiTouch.first_touch || attribution.first_touch;
-      if (firstTouch?.source) {
-        const source = firstTouch.source;
-        if (!sourceData[source]) {
-          sourceData[source] = {
-            source,
+      const firstTouchSource = deriveSource(firstTouch);
+      if (firstTouchSource) {
+        if (!sourceData[firstTouchSource]) {
+          sourceData[firstTouchSource] = {
+            source: firstTouchSource,
             orders: 0,
             revenue: 0,
             firstTouch: 0,
@@ -149,18 +183,18 @@ export async function GET(request: Request) {
             positionBased: 0,
           };
         }
-        sourceData[source].firstTouch += orderTotal;
-        sourceData[source].orders++;
-        sourceData[source].revenue += orderTotal;
+        sourceData[firstTouchSource].firstTouch += orderTotal;
+        sourceData[firstTouchSource].orders++;
+        sourceData[firstTouchSource].revenue += orderTotal;
       }
 
       // Last touch attribution
       const lastTouch = multiTouch.last_touch || attribution.last_touch;
-      if (lastTouch?.source) {
-        const source = lastTouch.source;
-        if (!sourceData[source]) {
-          sourceData[source] = {
-            source,
+      const lastTouchSource = deriveSource(lastTouch);
+      if (lastTouchSource) {
+        if (!sourceData[lastTouchSource]) {
+          sourceData[lastTouchSource] = {
+            source: lastTouchSource,
             orders: 0,
             revenue: 0,
             firstTouch: 0,
@@ -169,7 +203,7 @@ export async function GET(request: Request) {
             positionBased: 0,
           };
         }
-        sourceData[source].lastTouch += orderTotal;
+        sourceData[lastTouchSource].lastTouch += orderTotal;
       }
 
       // Linear attribution
@@ -216,6 +250,59 @@ export async function GET(request: Request) {
             };
           }
           sourceData[source].positionBased += orderTotal * (item.weight || 1);
+        }
+      }
+
+      // Fallback: Generate linear/position_based from first/last touch
+      // when multi_touch data is incomplete but we have different sources
+      const hasLinearData = linear && linear.length > 1;
+      const hasPositionData =
+        positionBased &&
+        (Array.isArray(positionBased) ? positionBased.length > 1 : false);
+
+      if (
+        firstTouchSource &&
+        lastTouchSource &&
+        firstTouchSource !== lastTouchSource &&
+        !hasLinearData
+      ) {
+        // Two distinct sources - distribute 50/50 for linear
+        for (const src of [firstTouchSource, lastTouchSource]) {
+          if (!sourceData[src]) {
+            sourceData[src] = {
+              source: src,
+              orders: 0,
+              revenue: 0,
+              firstTouch: 0,
+              lastTouch: 0,
+              linear: 0,
+              positionBased: 0,
+            };
+          }
+          sourceData[src].linear += orderTotal * 0.5;
+        }
+      }
+
+      if (
+        firstTouchSource &&
+        lastTouchSource &&
+        firstTouchSource !== lastTouchSource &&
+        !hasPositionData
+      ) {
+        // Two distinct sources - 50/50 for position based (40% each in 2-touch)
+        for (const src of [firstTouchSource, lastTouchSource]) {
+          if (!sourceData[src]) {
+            sourceData[src] = {
+              source: src,
+              orders: 0,
+              revenue: 0,
+              firstTouch: 0,
+              lastTouch: 0,
+              linear: 0,
+              positionBased: 0,
+            };
+          }
+          sourceData[src].positionBased += orderTotal * 0.5;
         }
       }
     }
