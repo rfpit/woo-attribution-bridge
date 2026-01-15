@@ -13,7 +13,19 @@ function storeFilter(storeIds: string[]) {
   return or(...storeIds.map((id) => eq(orders.storeId, id)))!;
 }
 
+interface MultiTouchData {
+  first_touch?: { source: string; weight: number };
+  last_touch?: { source: string; weight: number };
+  linear?: Array<{ source: string; weight: number }>;
+  position_based?: Array<{ source: string; weight: number }>;
+  time_decay?: Array<{ source: string; weight: number }>;
+  touchpoint_count?: number;
+}
+
 interface AttributionData {
+  // New nested structure from WordPress plugin
+  multi_touch?: MultiTouchData;
+  // Legacy flat structure (for backwards compatibility)
   first_touch?: { source: string; weight: number };
   last_touch?: { source: string; weight: number };
   linear?: Array<{ source: string; weight: number }>;
@@ -109,17 +121,23 @@ export async function GET(request: Request) {
 
       const orderTotal = parseFloat(order.total);
 
+      // Get multi-touch data (check nested structure first, then flat)
+      const multiTouch = attribution.multi_touch || attribution;
+
       // Track touchpoint distribution
-      if (attribution.touchpoint_count) {
-        const count = attribution.touchpoint_count;
-        touchpointCounts[count] = (touchpointCounts[count] || 0) + 1;
-        totalTouchpoints += count;
+      const touchpointCount =
+        multiTouch.touchpoint_count || attribution.touchpoint_count;
+      if (touchpointCount) {
+        touchpointCounts[touchpointCount] =
+          (touchpointCounts[touchpointCount] || 0) + 1;
+        totalTouchpoints += touchpointCount;
         ordersWithTouchpoints++;
       }
 
       // First touch attribution
-      if (attribution.first_touch?.source) {
-        const source = attribution.first_touch.source;
+      const firstTouch = multiTouch.first_touch || attribution.first_touch;
+      if (firstTouch?.source) {
+        const source = firstTouch.source;
         if (!sourceData[source]) {
           sourceData[source] = {
             source,
@@ -137,8 +155,9 @@ export async function GET(request: Request) {
       }
 
       // Last touch attribution
-      if (attribution.last_touch?.source) {
-        const source = attribution.last_touch.source;
+      const lastTouch = multiTouch.last_touch || attribution.last_touch;
+      if (lastTouch?.source) {
+        const source = lastTouch.source;
         if (!sourceData[source]) {
           sourceData[source] = {
             source,
@@ -154,8 +173,9 @@ export async function GET(request: Request) {
       }
 
       // Linear attribution
-      if (attribution.linear) {
-        for (const item of attribution.linear) {
+      const linear = multiTouch.linear || attribution.linear;
+      if (linear) {
+        for (const item of linear) {
           if (!item.source) continue;
           const source = item.source;
           if (!sourceData[source]) {
@@ -174,8 +194,14 @@ export async function GET(request: Request) {
       }
 
       // Position-based attribution
-      if (attribution.position_based) {
-        for (const item of attribution.position_based) {
+      const positionBased =
+        multiTouch.position_based || attribution.position_based;
+      if (positionBased) {
+        // Handle both array and single object formats
+        const items = Array.isArray(positionBased)
+          ? positionBased
+          : [positionBased];
+        for (const item of items) {
           if (!item.source) continue;
           const source = item.source;
           if (!sourceData[source]) {
@@ -189,7 +215,7 @@ export async function GET(request: Request) {
               positionBased: 0,
             };
           }
-          sourceData[source].positionBased += orderTotal * item.weight;
+          sourceData[source].positionBased += orderTotal * (item.weight || 1);
         }
       }
     }
