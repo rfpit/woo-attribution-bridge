@@ -89,7 +89,13 @@ jobs:
           mkdir -p ~/.ssh
           echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_ed25519
           chmod 600 ~/.ssh/id_ed25519
-          ssh-keyscan -H ${{ secrets.DASHBOARD_HOST }} >> ~/.ssh/known_hosts
+          # Wait for WireGuard to stabilize, then retry keyscan
+          sleep 3
+          for i in 1 2 3; do
+            HOST=${{ secrets.DASHBOARD_HOST }}
+            ssh-keyscan -T 10 -H $HOST >> ~/.ssh/known_hosts && break
+            echo "Retry $i..." && sleep 2
+          done
 
       - name: Deploy to staging server
         env:
@@ -149,7 +155,13 @@ jobs:
           mkdir -p ~/.ssh
           echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_ed25519
           chmod 600 ~/.ssh/id_ed25519
-          ssh-keyscan -H ${{ secrets.WP_STAGING_HOST }} >> ~/.ssh/known_hosts
+          # Wait for WireGuard to stabilize, then retry keyscan
+          sleep 3
+          for i in 1 2 3; do
+            HOST=${{ secrets.WP_STAGING_HOST }}
+            ssh-keyscan -T 10 -H $HOST >> ~/.ssh/known_hosts && break
+            echo "Retry $i..." && sleep 2
+          done
 
       - name: Deploy plugin via rsync
         env:
