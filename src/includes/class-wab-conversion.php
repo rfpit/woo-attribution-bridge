@@ -146,13 +146,15 @@ class WAB_Conversion {
 	/**
 	 * Handle order processing event.
 	 *
-	 * Optionally send conversions on processing status.
+	 * Send conversions on processing status (enabled by default).
+	 * Most payment gateways set orders to processing when payment is received.
 	 *
 	 * @param int $order_id Order ID.
 	 */
 	public function on_order_processing( int $order_id ): void {
-		// Check if we should send on processing (some stores prefer this).
-		if ( ! apply_filters( 'wab_send_on_processing', false ) ) {
+		// Send on processing by default - most stores receive orders in this status.
+		// Can be disabled via filter: add_filter('wab_send_on_processing', '__return_false');
+		if ( ! apply_filters( 'wab_send_on_processing', true ) ) {
 			return;
 		}
 
@@ -191,18 +193,17 @@ class WAB_Conversion {
 			return [];
 		}
 
-		// Get attribution data.
+		// Get attribution data (may be empty for direct orders).
 		$attribution = $this->cookie->get_order_attribution( $order );
 
 		if ( empty( $attribution ) ) {
 			if ( get_option( 'wab_debug_mode', false ) ) {
-				error_log( sprintf( '[WAB] Order #%d - No attribution data found', $order_id ) );
+				error_log( sprintf( '[WAB] Order #%d - No attribution data found (direct order)', $order_id ) );
 			}
-			// Still mark as processed to avoid repeated attempts.
-			$order->update_meta_data( '_wab_conversions_sent', time() );
 			$order->update_meta_data( '_wab_no_attribution', true );
-			$order->save();
-			return [];
+			// Attribution is empty but we still dispatch - dashboard receives all orders,
+			// ad platform integrations will skip due to missing click IDs.
+			$attribution = [];
 		}
 
 		// Dispatch to all integrations.

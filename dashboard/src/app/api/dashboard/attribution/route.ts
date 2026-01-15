@@ -121,6 +121,17 @@ export async function GET(request: Request) {
         touchpointDistribution: [],
         averageTouchpoints: 0,
         totalOrdersWithAttribution: 0,
+        timeToConversion: {
+          average: 0,
+          median: 0,
+          distribution: [],
+          ordersWithData: 0,
+        },
+        journeyPatterns: {
+          singleTouch: { orders: 0, revenue: 0 },
+          multiTouch: { orders: 0, revenue: 0 },
+          avgTouchpointsMulti: 0,
+        },
       });
     }
 
@@ -149,6 +160,23 @@ export async function GET(request: Request) {
     let totalTouchpoints = 0;
     let ordersWithTouchpoints = 0;
 
+    // Time-to-conversion tracking
+    const timeToConversionDays: number[] = [];
+    const timeToConversionBuckets = {
+      "<1 hour": { orders: 0, revenue: 0 },
+      "1-24 hours": { orders: 0, revenue: 0 },
+      "1-7 days": { orders: 0, revenue: 0 },
+      "7-30 days": { orders: 0, revenue: 0 },
+      "30+ days": { orders: 0, revenue: 0 },
+    };
+
+    // Journey pattern tracking
+    let singleTouchOrders = 0;
+    let singleTouchRevenue = 0;
+    let multiTouchOrders = 0;
+    let multiTouchRevenue = 0;
+    let multiTouchTotalTouchpoints = 0;
+
     for (const order of ordersWithAttribution) {
       const attribution = order.attribution as AttributionData | null;
       if (!attribution) continue;
@@ -166,7 +194,56 @@ export async function GET(request: Request) {
           (touchpointCounts[touchpointCount] || 0) + 1;
         totalTouchpoints += touchpointCount;
         ordersWithTouchpoints++;
+
+        // Track single vs multi-touch journeys
+        if (touchpointCount === 1) {
+          singleTouchOrders++;
+          singleTouchRevenue += orderTotal;
+        } else {
+          multiTouchOrders++;
+          multiTouchRevenue += orderTotal;
+          multiTouchTotalTouchpoints += touchpointCount;
+        }
       }
+
+      // Calculate time to conversion from first touch timestamp
+      const firstTouchData = attribution.first_touch || multiTouch.first_touch;
+      if (firstTouchData?.timestamp && order.dateCreated) {
+        const firstTouchTime =
+          typeof firstTouchData.timestamp === "number"
+            ? firstTouchData.timestamp * 1000 // Unix timestamp in seconds
+            : new Date(firstTouchData.timestamp).getTime();
+        const orderTime = new Date(order.dateCreated).getTime();
+
+        if (firstTouchTime > 0 && orderTime > firstTouchTime) {
+          const diffMs = orderTime - firstTouchTime;
+          const diffHours = diffMs / (1000 * 60 * 60);
+          const diffDays = diffHours / 24;
+
+          timeToConversionDays.push(diffDays);
+
+          // Bucket the time to conversion
+          if (diffHours < 1) {
+            timeToConversionBuckets["<1 hour"].orders++;
+            timeToConversionBuckets["<1 hour"].revenue += orderTotal;
+          } else if (diffHours < 24) {
+            timeToConversionBuckets["1-24 hours"].orders++;
+            timeToConversionBuckets["1-24 hours"].revenue += orderTotal;
+          } else if (diffDays < 7) {
+            timeToConversionBuckets["1-7 days"].orders++;
+            timeToConversionBuckets["1-7 days"].revenue += orderTotal;
+          } else if (diffDays < 30) {
+            timeToConversionBuckets["7-30 days"].orders++;
+            timeToConversionBuckets["7-30 days"].revenue += orderTotal;
+          } else {
+            timeToConversionBuckets["30+ days"].orders++;
+            timeToConversionBuckets["30+ days"].revenue += orderTotal;
+          }
+        }
+      }
+
+      // Collect all unique sources for this order to count orders/revenue once per source
+      const sourcesInOrder = new Set<string>();
 
       // First touch attribution
       // Prefer outer attribution.first_touch (from WAB_Cookie) over multi_touch
@@ -174,6 +251,7 @@ export async function GET(request: Request) {
       const firstTouch = attribution.first_touch || multiTouch.first_touch;
       const firstTouchSource = deriveSource(firstTouch);
       if (firstTouchSource) {
+        sourcesInOrder.add(firstTouchSource);
         if (!sourceData[firstTouchSource]) {
           sourceData[firstTouchSource] = {
             source: firstTouchSource,
@@ -186,8 +264,6 @@ export async function GET(request: Request) {
           };
         }
         sourceData[firstTouchSource].firstTouch += orderTotal;
-        sourceData[firstTouchSource].orders++;
-        sourceData[firstTouchSource].revenue += orderTotal;
       }
 
       // Last touch attribution
@@ -195,6 +271,7 @@ export async function GET(request: Request) {
       const lastTouch = attribution.last_touch || multiTouch.last_touch;
       const lastTouchSource = deriveSource(lastTouch);
       if (lastTouchSource) {
+        sourcesInOrder.add(lastTouchSource);
         if (!sourceData[lastTouchSource]) {
           sourceData[lastTouchSource] = {
             source: lastTouchSource,
@@ -215,6 +292,7 @@ export async function GET(request: Request) {
         for (const item of linear) {
           if (!item.source) continue;
           const source = item.source;
+          sourcesInOrder.add(source);
           if (!sourceData[source]) {
             sourceData[source] = {
               source,
@@ -241,6 +319,7 @@ export async function GET(request: Request) {
         for (const item of items) {
           if (!item.source) continue;
           const source = item.source;
+          sourcesInOrder.add(source);
           if (!sourceData[source]) {
             sourceData[source] = {
               source,
@@ -308,6 +387,14 @@ export async function GET(request: Request) {
           sourceData[src].positionBased += orderTotal * 0.5;
         }
       }
+
+      // Count orders and revenue once per unique source in this order
+      for (const source of sourcesInOrder) {
+        if (sourceData[source]) {
+          sourceData[source].orders++;
+          sourceData[source].revenue += orderTotal;
+        }
+      }
     }
 
     // Convert to arrays and sort
@@ -338,6 +425,30 @@ export async function GET(request: Request) {
       }))
       .sort((a, b) => a.touchpoints - b.touchpoints);
 
+    // Calculate time-to-conversion statistics
+    const sortedTimes = [...timeToConversionDays].sort((a, b) => a - b);
+    const avgTimeToConversion =
+      sortedTimes.length > 0
+        ? sortedTimes.reduce((a, b) => a + b, 0) / sortedTimes.length
+        : 0;
+    const medianTimeToConversion =
+      sortedTimes.length > 0
+        ? sortedTimes.length % 2 === 0
+          ? (sortedTimes[sortedTimes.length / 2 - 1] +
+              sortedTimes[sortedTimes.length / 2]) /
+            2
+          : sortedTimes[Math.floor(sortedTimes.length / 2)]
+        : 0;
+
+    // Convert buckets to array for easier frontend consumption
+    const timeToConversionDistribution = Object.entries(
+      timeToConversionBuckets,
+    ).map(([bucket, data]) => ({
+      bucket,
+      orders: data.orders,
+      revenue: data.revenue,
+    }));
+
     return NextResponse.json({
       sources,
       models,
@@ -347,6 +458,28 @@ export async function GET(request: Request) {
           ? totalTouchpoints / ordersWithTouchpoints
           : 0,
       totalOrdersWithAttribution: ordersWithAttribution.length,
+      // New time-to-conversion data
+      timeToConversion: {
+        average: avgTimeToConversion,
+        median: medianTimeToConversion,
+        distribution: timeToConversionDistribution,
+        ordersWithData: sortedTimes.length,
+      },
+      // New journey pattern data
+      journeyPatterns: {
+        singleTouch: {
+          orders: singleTouchOrders,
+          revenue: singleTouchRevenue,
+        },
+        multiTouch: {
+          orders: multiTouchOrders,
+          revenue: multiTouchRevenue,
+        },
+        avgTouchpointsMulti:
+          multiTouchOrders > 0
+            ? multiTouchTotalTouchpoints / multiTouchOrders
+            : 0,
+      },
     });
   } catch (error) {
     console.error("Attribution fetch error:", error);

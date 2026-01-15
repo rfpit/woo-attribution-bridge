@@ -159,11 +159,13 @@ class WAB_Activator {
 			'wab_debug_mode'      => false,
 
 			// Click IDs to capture.
-			'wab_capture_fbclid'  => true,
-			'wab_capture_gclid'   => true,
-			'wab_capture_ttclid'  => true,
-			'wab_capture_msclkid' => true,
-			'wab_capture_utm'     => true,
+			'wab_capture_fbclid'    => true,
+			'wab_capture_gclid'     => true,
+			'wab_capture_ttclid'    => true,
+			'wab_capture_msclkid'   => true,
+			'wab_capture_dclid'     => true,
+			'wab_capture_li_fat_id' => true,
+			'wab_capture_utm'       => true,
 
 			// Queue settings.
 			'wab_queue_enabled'        => true,

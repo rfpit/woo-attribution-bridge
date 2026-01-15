@@ -90,6 +90,11 @@ class WAB_Admin {
 	 * Register plugin settings.
 	 */
 	public function register_settings(): void {
+		// Dashboard connection settings.
+		register_setting( 'wab_dashboard', 'wab_dashboard_url' );
+		register_setting( 'wab_dashboard', 'wab_api_key' );
+		register_setting( 'wab_dashboard', 'wab_dashboard_enabled' );
+
 		// General settings.
 		register_setting( 'wab_general', 'wab_debug_mode' );
 		register_setting( 'wab_general', 'wab_cookie_expiry' );
@@ -172,9 +177,10 @@ class WAB_Admin {
 	 */
 	public function render_settings_page(): void {
 		// Get current tab.
-		$current_tab = isset( $_GET['tab'] ) ? sanitize_key( $_GET['tab'] ) : 'general'; // phpcs:ignore
+		$current_tab = isset( $_GET['tab'] ) ? sanitize_key( $_GET['tab'] ) : 'dashboard'; // phpcs:ignore
 
 		$tabs = [
+			'dashboard'    => __( 'Dashboard', 'woo-attribution-bridge' ),
 			'general'      => __( 'General', 'woo-attribution-bridge' ),
 			'meta'         => __( 'Meta', 'woo-attribution-bridge' ),
 			'google'       => __( 'Google Ads', 'woo-attribution-bridge' ),
