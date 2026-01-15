@@ -169,7 +169,9 @@ export async function GET(request: Request) {
       }
 
       // First touch attribution
-      const firstTouch = multiTouch.first_touch || attribution.first_touch;
+      // Prefer outer attribution.first_touch (from WAB_Cookie) over multi_touch
+      // because WAB_Cookie correctly tracks first/last touch while touchpoint tracker may be incomplete
+      const firstTouch = attribution.first_touch || multiTouch.first_touch;
       const firstTouchSource = deriveSource(firstTouch);
       if (firstTouchSource) {
         if (!sourceData[firstTouchSource]) {
@@ -189,7 +191,8 @@ export async function GET(request: Request) {
       }
 
       // Last touch attribution
-      const lastTouch = multiTouch.last_touch || attribution.last_touch;
+      // Prefer outer attribution.last_touch (from WAB_Cookie) over multi_touch
+      const lastTouch = attribution.last_touch || multiTouch.last_touch;
       const lastTouchSource = deriveSource(lastTouch);
       if (lastTouchSource) {
         if (!sourceData[lastTouchSource]) {
