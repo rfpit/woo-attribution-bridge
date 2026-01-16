@@ -139,6 +139,22 @@ class WAB_Activator {
 			KEY created_at (created_at)
 		) {$charset_collate};";
 
+		// Server-side attribution cache (cookie-less fallback).
+		$cache_table = $wpdb->prefix . 'wab_attribution_cache';
+		$cache_sql = "CREATE TABLE {$cache_table} (
+			id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+			fingerprint_hash varchar(64) NOT NULL,
+			click_ids text DEFAULT NULL,
+			utm_params text DEFAULT NULL,
+			landing_page text DEFAULT NULL,
+			referrer text DEFAULT NULL,
+			created_at datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			expires_at datetime NOT NULL,
+			PRIMARY KEY (id),
+			UNIQUE KEY fingerprint_hash (fingerprint_hash),
+			KEY expires_at (expires_at)
+		) {$charset_collate};";
+
 		require_once ABSPATH . 'wp-admin/includes/upgrade.php';
 
 		dbDelta( $queue_sql );
@@ -146,6 +162,7 @@ class WAB_Activator {
 		dbDelta( $touchpoints_sql );
 		dbDelta( $identities_sql );
 		dbDelta( $surveys_sql );
+		dbDelta( $cache_sql );
 	}
 
 	/**
@@ -154,9 +171,12 @@ class WAB_Activator {
 	private static function set_default_options(): void {
 		$defaults = [
 			// General settings.
-			'wab_cookie_name'     => 'wab_attribution',
+			'wab_cookie_name'     => 'wab_a',
 			'wab_cookie_expiry'   => 90, // days
 			'wab_debug_mode'      => false,
+
+			// Server-side attribution cache (cookie-less fallback).
+			'wab_cache_ttl'       => 48, // hours
 
 			// Click IDs to capture.
 			'wab_capture_fbclid'    => true,
@@ -215,6 +235,10 @@ class WAB_Activator {
 
 		if ( ! wp_next_scheduled( 'wab_cleanup_old_logs' ) ) {
 			wp_schedule_event( time(), 'daily', 'wab_cleanup_old_logs' );
+		}
+
+		if ( ! wp_next_scheduled( 'wab_cleanup_attribution_cache' ) ) {
+			wp_schedule_event( time(), 'hourly', 'wab_cleanup_attribution_cache' );
 		}
 	}
 }

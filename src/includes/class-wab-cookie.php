@@ -15,6 +15,13 @@ defined( 'ABSPATH' ) || exit;
 class WAB_Cookie {
 
 	/**
+	 * Consent handler instance.
+	 *
+	 * @var WAB_Consent|null
+	 */
+	private ?WAB_Consent $consent = null;
+
+	/**
 	 * Click ID parameter mappings.
 	 *
 	 * @var array<string, string>
@@ -42,12 +49,24 @@ class WAB_Cookie {
 	];
 
 	/**
+	 * Get the consent handler.
+	 *
+	 * @return WAB_Consent
+	 */
+	private function get_consent(): WAB_Consent {
+		if ( $this->consent === null ) {
+			$this->consent = new WAB_Consent();
+		}
+		return $this->consent;
+	}
+
+	/**
 	 * Get the cookie name.
 	 *
 	 * @return string
 	 */
 	public function get_cookie_name(): string {
-		return get_option( 'wab_cookie_name', 'wab_attribution' );
+		return get_option( 'wab_cookie_name', 'wab_a' );
 	}
 
 	/**
@@ -128,10 +147,16 @@ class WAB_Cookie {
 			}
 		}
 
-		// Save attribution data.
+		// Save attribution data (to cookie if consent allows).
 		$this->set_attribution_data( $attribution );
 
-		// Record touchpoint if we captured any click IDs.
+		// Always store server-side for cookie-less fallback.
+		// This is attribution (linking click ID to conversion), not tracking.
+		if ( ! empty( $new_click_ids ) || ! empty( $utm_params ) ) {
+			$this->store_server_side_attribution( $new_click_ids, $utm_params );
+		}
+
+		// Record touchpoint if we captured any click IDs (requires consent).
 		if ( ! empty( $new_click_ids ) ) {
 			$this->record_touchpoint( $new_click_ids, $utm_params );
 		}
@@ -200,20 +225,23 @@ class WAB_Cookie {
 	}
 
 	/**
-	 * Get attribution data from cookie.
+	 * Get attribution data from cookie (with server-side fallback).
 	 *
 	 * @return array
 	 */
 	public function get_attribution_data(): array {
 		$cookie_name = $this->get_cookie_name();
 
-		if ( ! isset( $_COOKIE[ $cookie_name ] ) ) {
-			return [];
+		// Try cookie first.
+		if ( isset( $_COOKIE[ $cookie_name ] ) ) {
+			$data = json_decode( wp_unslash( $_COOKIE[ $cookie_name ] ), true );
+			if ( is_array( $data ) && ! empty( $data ) ) {
+				return $data;
+			}
 		}
 
-		$data = json_decode( wp_unslash( $_COOKIE[ $cookie_name ] ), true );
-
-		return is_array( $data ) ? $data : [];
+		// Fall back to server-side attribution cache.
+		return $this->get_server_side_attribution();
 	}
 
 	/**
@@ -222,6 +250,11 @@ class WAB_Cookie {
 	 * @param array $data Attribution data.
 	 */
 	public function set_attribution_data( array $data ): void {
+		// Check consent before setting cookies.
+		if ( ! $this->get_consent()->can_set_cookies() ) {
+			return;
+		}
+
 		$cookie_name = $this->get_cookie_name();
 		$expiry      = time() + ( $this->get_cookie_expiry() * DAY_IN_SECONDS );
 		$secure      = is_ssl();
@@ -240,6 +273,11 @@ class WAB_Cookie {
 	 * Ensure visitor ID cookie exists.
 	 */
 	private function ensure_visitor_id(): void {
+		// Check consent before setting cookies.
+		if ( ! $this->get_consent()->can_set_cookies() ) {
+			return;
+		}
+
 		$cookie_name = $this->get_visitor_cookie_name();
 
 		if ( isset( $_COOKIE[ $cookie_name ] ) ) {
@@ -283,6 +321,11 @@ class WAB_Cookie {
 	 * @param array $utm_params UTM parameters captured.
 	 */
 	private function record_touchpoint( array $click_ids, array $utm_params ): void {
+		// Check if tracking is allowed (full or anonymous consent).
+		if ( ! $this->get_consent()->can_track() ) {
+			return;
+		}
+
 		global $wpdb;
 
 		$visitor_id = $this->get_visitor_id();
@@ -361,6 +404,174 @@ class WAB_Cookie {
 
 		// Hash for privacy.
 		return hash( 'sha256', $ip . wp_salt() );
+	}
+
+	/**
+	 * Get fingerprint hash for server-side attribution.
+	 *
+	 * Combines IP + User Agent for a session-like identifier.
+	 * This is NOT for tracking users - only for linking click IDs to conversions.
+	 *
+	 * @return string
+	 */
+	public function get_fingerprint_hash(): string {
+		$ip = '';
+
+		if ( ! empty( $_SERVER['HTTP_X_FORWARDED_FOR'] ) ) {
+			$ip = sanitize_text_field( wp_unslash( $_SERVER['HTTP_X_FORWARDED_FOR'] ) );
+			$ip = explode( ',', $ip )[0];
+		} elseif ( ! empty( $_SERVER['REMOTE_ADDR'] ) ) {
+			$ip = sanitize_text_field( wp_unslash( $_SERVER['REMOTE_ADDR'] ) );
+		}
+
+		$ua = isset( $_SERVER['HTTP_USER_AGENT'] )
+			? sanitize_text_field( wp_unslash( $_SERVER['HTTP_USER_AGENT'] ) )
+			: '';
+
+		// Combine IP + UA for a session-like fingerprint.
+		return hash( 'sha256', $ip . '|' . $ua . '|' . wp_salt() );
+	}
+
+	/**
+	 * Store attribution data server-side (cookie-less fallback).
+	 *
+	 * Always called regardless of consent - this is attribution, not tracking.
+	 *
+	 * @param array $click_ids Click IDs captured from URL.
+	 * @param array $utm_params UTM parameters captured from URL.
+	 */
+	public function store_server_side_attribution( array $click_ids, array $utm_params = [] ): void {
+		global $wpdb;
+
+		$fingerprint = $this->get_fingerprint_hash();
+		$table       = $wpdb->prefix . 'wab_attribution_cache';
+		$ttl_hours   = (int) get_option( 'wab_cache_ttl', 48 );
+		$expires_at  = gmdate( 'Y-m-d H:i:s', time() + ( $ttl_hours * HOUR_IN_SECONDS ) );
+
+		// Prepare data.
+		$landing_page = $this->get_current_url();
+		$referrer     = isset( $_SERVER['HTTP_REFERER'] )
+			? esc_url_raw( wp_unslash( $_SERVER['HTTP_REFERER'] ) )
+			: null;
+
+		// Use INSERT ... ON DUPLICATE KEY UPDATE to merge click IDs.
+		$existing = $wpdb->get_row(
+			$wpdb->prepare(
+				"SELECT click_ids, utm_params FROM {$table} WHERE fingerprint_hash = %s",
+				$fingerprint
+			),
+			ARRAY_A
+		);
+
+		if ( $existing ) {
+			// Merge with existing data.
+			$existing_clicks = json_decode( $existing['click_ids'], true ) ?: [];
+			$existing_utm    = json_decode( $existing['utm_params'], true ) ?: [];
+
+			// New click IDs take precedence (last touch).
+			$merged_clicks = array_merge( $existing_clicks, $click_ids );
+			$merged_utm    = ! empty( $utm_params ) ? $utm_params : $existing_utm;
+
+			$wpdb->update(
+				$table,
+				[
+					'click_ids'  => wp_json_encode( $merged_clicks ),
+					'utm_params' => wp_json_encode( $merged_utm ),
+					'expires_at' => $expires_at,
+				],
+				[ 'fingerprint_hash' => $fingerprint ],
+				[ '%s', '%s', '%s' ],
+				[ '%s' ]
+			);
+		} else {
+			// Insert new record.
+			$wpdb->insert(
+				$table,
+				[
+					'fingerprint_hash' => $fingerprint,
+					'click_ids'        => wp_json_encode( $click_ids ),
+					'utm_params'       => wp_json_encode( $utm_params ),
+					'landing_page'     => $landing_page,
+					'referrer'         => $referrer,
+					'expires_at'       => $expires_at,
+				],
+				[ '%s', '%s', '%s', '%s', '%s', '%s' ]
+			);
+		}
+	}
+
+	/**
+	 * Get attribution data from server-side cache.
+	 *
+	 * Used as fallback when cookies are blocked/declined.
+	 *
+	 * @return array Attribution data or empty array.
+	 */
+	public function get_server_side_attribution(): array {
+		global $wpdb;
+
+		$fingerprint = $this->get_fingerprint_hash();
+		$table       = $wpdb->prefix . 'wab_attribution_cache';
+
+		$row = $wpdb->get_row(
+			$wpdb->prepare(
+				"SELECT click_ids, utm_params, landing_page, referrer
+				 FROM {$table}
+				 WHERE fingerprint_hash = %s AND expires_at > NOW()",
+				$fingerprint
+			),
+			ARRAY_A
+		);
+
+		if ( ! $row ) {
+			return [];
+		}
+
+		$attribution = [];
+
+		// Decode click IDs.
+		$click_ids = json_decode( $row['click_ids'], true ) ?: [];
+		foreach ( $click_ids as $key => $value ) {
+			$attribution[ $key ] = $value;
+		}
+
+		// Add first/last touch from click IDs.
+		if ( ! empty( $click_ids ) ) {
+			$attribution['first_touch'] = $click_ids;
+			$attribution['last_touch']  = $click_ids;
+		}
+
+		// Decode UTM params.
+		$utm_params = json_decode( $row['utm_params'], true ) ?: [];
+		if ( ! empty( $utm_params ) ) {
+			$attribution['utm'] = $utm_params;
+		}
+
+		// Add landing page and referrer.
+		if ( ! empty( $row['landing_page'] ) ) {
+			$attribution['landing_page'] = $row['landing_page'];
+		}
+		if ( ! empty( $row['referrer'] ) ) {
+			$attribution['referrer'] = $row['referrer'];
+		}
+
+		// Mark as server-side attribution.
+		$attribution['_source'] = 'server_side';
+
+		return $attribution;
+	}
+
+	/**
+	 * Cleanup expired attribution cache entries.
+	 *
+	 * Called by cron job.
+	 */
+	public static function cleanup_attribution_cache(): void {
+		global $wpdb;
+
+		$table = $wpdb->prefix . 'wab_attribution_cache';
+
+		$wpdb->query( "DELETE FROM {$table} WHERE expires_at < NOW()" );
 	}
 
 	/**

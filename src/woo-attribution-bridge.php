@@ -81,6 +81,7 @@ function wab_init(): void {
 	require_once WAB_PLUGIN_DIR . 'includes/class-wab-rest-api.php';
 	require_once WAB_PLUGIN_DIR . 'includes/class-wab-touchpoint-tracker.php';
 	require_once WAB_PLUGIN_DIR . 'includes/class-wab-identity-resolver.php';
+	require_once WAB_PLUGIN_DIR . 'includes/class-wab-consent.php';
 
 	// Load integrations.
 	require_once WAB_PLUGIN_DIR . 'integrations/class-wab-meta.php';

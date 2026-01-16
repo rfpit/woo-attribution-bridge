@@ -136,13 +136,14 @@ jobs:
         with:
           private-key: ${{ secrets.WG_PRIVATE_KEY }}
           endpoint: ${{ secrets.WG_ENDPOINT }}
-          server-public-key: ${{ secrets.WG_SERVER_PUBLIC_KEY }}
-          client-address: ${{ secrets.WG_RUNNER_ADDRESS }}
+          server-public-key: ${{ secrets.WG_PEER_PUBLIC_KEY }}
+          client-address: ${{ secrets.WG_ADDRESS }}
+          allowed-ips: ${{ secrets.WG_ALLOWED_IPS }}
 
       - name: Setup SSH key
         run: |
           mkdir -p ~/.ssh
-          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_ed25519
+          echo "${{ secrets.DASHBOARD_SSH_KEY }}" > ~/.ssh/id_ed25519
           chmod 600 ~/.ssh/id_ed25519
           # Wait for WireGuard to stabilize, then retry keyscan
           sleep 3
@@ -210,8 +211,9 @@ jobs:
         with:
           private-key: ${{ secrets.WG_PRIVATE_KEY }}
           endpoint: ${{ secrets.WG_ENDPOINT }}
-          server-public-key: ${{ secrets.WG_SERVER_PUBLIC_KEY }}
-          client-address: ${{ secrets.WG_RUNNER_ADDRESS }}
+          server-public-key: ${{ secrets.WG_PEER_PUBLIC_KEY }}
+          client-address: ${{ secrets.WG_ADDRESS }}
+          allowed-ips: ${{ secrets.WG_ALLOWED_IPS }}
 
       - name: Setup SSH key
         run: |
@@ -221,22 +223,50 @@ jobs:
           # Wait for WireGuard to stabilize, then retry keyscan
           sleep 3
           for i in 1 2 3; do
-            HOST=${{ secrets.WP_PRODUCTION_HOST }}
+            HOST=${{ secrets.SSH_HOST }}
             ssh-keyscan -T 10 -H $HOST >> ~/.ssh/known_hosts && break
             echo "Retry $i..." && sleep 2
           done
 
-      - name: Deploy plugin via rsync
+      - name: Backup current plugin
+        id: backup
+        timeout-minutes: 2
         env:
-          HOST: ${{ secrets.WP_PRODUCTION_HOST }}
-          WP_PATH: ${{ secrets.WP_PRODUCTION_PATH }}
+          HOST: ${{ secrets.SSH_HOST }}
+          WP_PATH: ${{ secrets.DEPLOY_PATH }}
         run: |
           PLUGIN_PATH="${WP_PATH}/wp-content/plugins/woo-attribution-bridge"
+          BACKUP_PATH="${WP_PATH}/wp-content/plugins/.wab-backup-prod"
+          SSH_OPTS="-o ConnectTimeout=30 -o ServerAliveInterval=10"
+
+          # Create backup of current plugin (if exists)
+          ssh ${SSH_OPTS} root@${HOST} << BACKUP
+            if [ -d "${PLUGIN_PATH}" ]; then
+              rm -rf ${BACKUP_PATH}
+              cp -r ${PLUGIN_PATH} ${BACKUP_PATH}
+              echo "Backup created at ${BACKUP_PATH}"
+            else
+              echo "No existing plugin to backup"
+            fi
+          BACKUP
+
+          echo "backup_path=${BACKUP_PATH}" >> $GITHUB_OUTPUT
+
+      - name: Deploy plugin via rsync
+        timeout-minutes: 5
+        env:
+          HOST: ${{ secrets.SSH_HOST }}
+          WP_PATH: ${{ secrets.DEPLOY_PATH }}
+        run: |
+          PLUGIN_PATH="${WP_PATH}/wp-content/plugins/woo-attribution-bridge"
+          SSH_OPTS="-o ConnectTimeout=30 -o ServerAliveInterval=10"
 
           # Ensure plugin directory exists
-          ssh root@${HOST} "mkdir -p ${PLUGIN_PATH}"
+          ssh ${SSH_OPTS} root@${HOST} "mkdir -p ${PLUGIN_PATH}"
 
-          rsync -avz --delete \
+          # Rsync with timeout (120s for I/O operations)
+          rsync -avz --delete --timeout=120 \
+            -e "ssh ${SSH_OPTS}" \
             --exclude '.git' \
             --exclude 'tests' \
             --exclude 'composer.json' \
@@ -247,7 +277,93 @@ jobs:
             ./src/ \
             root@${HOST}:${PLUGIN_PATH}/
 
-          echo "Plugin deployed to production"
+          # Fix permissions (CloudPanel uses clp:clp for web files)
+          ssh ${SSH_OPTS} root@${HOST} "chown -R clp:clp ${PLUGIN_PATH}"
+          ssh ${SSH_OPTS} root@${HOST} "chmod -R u=rwX,go=rX ${PLUGIN_PATH}"
+
+          echo "Plugin deployed to production with correct permissions"
+
+      - name: Verify WordPress site health
+        id: health_check
+        timeout-minutes: 2
+        env:
+          HOST: ${{ secrets.SSH_HOST }}
+          SITE_URL: ${{ secrets.SITE_URL }}
+        run: |
+          # Skip if SITE_URL not configured
+          if [ -z "${SITE_URL}" ]; then
+            echo "::warning::SITE_URL not set, skipping health check"
+            echo "health_ok=skipped" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          echo "Waiting for WordPress to reload..."
+          sleep 5
+          SSH_OPTS="-o ConnectTimeout=30 -o ServerAliveInterval=10"
+
+          # Check if site returns 200 (not 500 critical error)
+          CURL_CMD="curl -sL -o /dev/null -w '%{http_code}' --max-time 30"
+          HTTP_CODE=$(ssh ${SSH_OPTS} root@${HOST} "${CURL_CMD} ${SITE_URL}")
+
+          echo "HTTP response code: ${HTTP_CODE}"
+
+          if [ "$HTTP_CODE" -ge 500 ]; then
+            echo "CRITICAL: Site returning HTTP ${HTTP_CODE}"
+            echo "health_ok=false" >> $GITHUB_OUTPUT
+            exit 1
+          elif [ "$HTTP_CODE" -ge 400 ]; then
+            echo "WARNING: HTTP ${HTTP_CODE} (may be auth required)"
+            echo "health_ok=true" >> $GITHUB_OUTPUT
+          else
+            echo "Site healthy with HTTP ${HTTP_CODE}"
+            echo "health_ok=true" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Rollback on failure
+        if: failure() && steps.health_check.outcome == 'failure'
+        timeout-minutes: 2
+        env:
+          HOST: ${{ secrets.SSH_HOST }}
+          WP_PATH: ${{ secrets.DEPLOY_PATH }}
+          SITE_URL: ${{ secrets.SITE_URL }}
+        run: |
+          PLUGIN_PATH="${WP_PATH}/wp-content/plugins/woo-attribution-bridge"
+          BACKUP_PATH="${WP_PATH}/wp-content/plugins/.wab-backup-prod"
+          SSH_OPTS="-o ConnectTimeout=30 -o ServerAliveInterval=10"
+
+          echo "::error::Health check failed! Rolling back..."
+
+          ssh ${SSH_OPTS} root@${HOST} << ROLLBACK
+            if [ -d "${BACKUP_PATH}" ]; then
+              rm -rf ${PLUGIN_PATH}
+              mv ${BACKUP_PATH} ${PLUGIN_PATH}
+              echo "Rollback complete - restored previous version"
+            else
+              echo "No backup found - cannot rollback"
+              exit 1
+            fi
+          ROLLBACK
+
+          # Verify rollback worked
+          sleep 3
+          CURL_CMD="curl -s -o /dev/null -w '%{http_code}' ${SITE_URL}"
+          HTTP_CODE=$(ssh ${SSH_OPTS} root@${HOST} "${CURL_CMD}")
+
+          if [ "$HTTP_CODE" -ge 500 ]; then
+            echo "::error::Rollback failed! Manual intervention required."
+            exit 1
+          fi
+
+          echo "::warning::Rollback successful. Site is back online."
+          echo "## ⚠️ Production Rollback" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          MSG="The production deployment caused a critical error"
+          echo "${MSG} and was rolled back." >> $GITHUB_STEP_SUMMARY
+          MSG2="Please investigate and fix the issue"
+          echo "${MSG2} before redeploying." >> $GITHUB_STEP_SUMMARY
+
+          # Exit with error to mark workflow as failed
+          exit 1
 
   notify-success:
     name: Notify Success

@@ -24,6 +24,57 @@
     },
   };
 
+  /**
+   * Check if user has granted advertising/marketing cookie consent.
+   * Supports CookieYes, Cookiebot, Complianz, and GDPR Cookie Consent plugins.
+   *
+   * @returns {boolean} True if consent granted, false otherwise.
+   */
+  function hasAdvertisingConsent() {
+    // Check CookieYes consent
+    const cookieYesMatch = document.cookie.match(/cookieyes-consent=([^;]+)/);
+    if (cookieYesMatch) {
+      const consentValue = decodeURIComponent(cookieYesMatch[1]);
+      const hasConsent = consentValue.includes("advertisement:yes");
+      log("CookieYes consent check:", hasConsent ? "granted" : "denied");
+      return hasConsent;
+    }
+
+    // Check Cookiebot consent
+    const cookiebotMatch = document.cookie.match(/CookieConsent=([^;]+)/);
+    if (cookiebotMatch) {
+      try {
+        const consentValue = decodeURIComponent(cookiebotMatch[1]);
+        const hasConsent = consentValue.includes("marketing:true");
+        log("Cookiebot consent check:", hasConsent ? "granted" : "denied");
+        return hasConsent;
+      } catch (e) {
+        // Parse error, assume no consent
+      }
+    }
+
+    // Check Complianz consent
+    const complianzMatch = document.cookie.match(/cmplz_marketing=([^;]+)/);
+    if (complianzMatch) {
+      const hasConsent = complianzMatch[1] === "allow";
+      log("Complianz consent check:", hasConsent ? "granted" : "denied");
+      return hasConsent;
+    }
+
+    // Check GDPR Cookie Consent
+    const gdprMatch = document.cookie.match(/gdpr_consent_given=([^;]+)/);
+    if (gdprMatch) {
+      const hasConsent = gdprMatch[1] === "1";
+      log("GDPR Cookie Consent check:", hasConsent ? "granted" : "denied");
+      return hasConsent;
+    }
+
+    // No consent management detected - default to allowing cookies
+    // (server-side will handle consent check as fallback)
+    log("No consent management detected, allowing cookies");
+    return true;
+  }
+
   // Click ID parameters to capture
   const CLICK_ID_PARAMS = [
     "fbclid",
@@ -255,16 +306,74 @@
     // Record timestamp
     attribution.last_seen = Math.floor(Date.now() / 1000);
 
-    // Save to cookie
-    setCookie(config.cookieName, attribution, config.cookieExpiry);
+    // Only save to cookie if consent is granted
+    if (hasAdvertisingConsent()) {
+      setCookie(config.cookieName, attribution, config.cookieExpiry);
+      log("Attribution data saved to cookie:", attribution);
+    } else {
+      // Clear any existing cookie when consent is revoked
+      document.cookie = `${config.cookieName}=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/`;
+      log(
+        "Consent not granted, cookie cleared (server-side cache will be used)",
+      );
+    }
+  }
 
-    log("Attribution data saved:", attribution);
+  /**
+   * Clear the attribution cookie.
+   */
+  function clearCookie() {
+    document.cookie = `${config.cookieName}=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/`;
+    log("Attribution cookie cleared");
+  }
+
+  /**
+   * Handle consent change events.
+   * Called when user accepts or rejects cookies via consent management.
+   */
+  function onConsentChange() {
+    if (hasAdvertisingConsent()) {
+      log("Consent granted, running capture");
+      capture();
+    } else {
+      log("Consent revoked, clearing cookie");
+      clearCookie();
+    }
+  }
+
+  /**
+   * Set up listeners for consent management platforms.
+   * These fire when user clicks accept/reject in the consent banner.
+   */
+  function setupConsentListeners() {
+    // CookieYes - fires when user updates consent preferences
+    document.addEventListener("cookieyes_consent_update", function (e) {
+      log("CookieYes consent updated", e.detail);
+      onConsentChange();
+    });
+
+    // Cookiebot - fires when user accepts/declines
+    if (typeof window.Cookiebot !== "undefined") {
+      window.addEventListener("CookiebotOnAccept", onConsentChange);
+      window.addEventListener("CookiebotOnDecline", onConsentChange);
+    }
+
+    // Complianz - fires on consent change
+    document.addEventListener("cmplz_status_change", onConsentChange);
+
+    // GDPR Cookie Consent - fires on consent change
+    document.addEventListener("gdpr_consent_changed", onConsentChange);
+
+    log("Consent listeners registered");
   }
 
   /**
    * Initialize on DOM ready.
    */
   function init() {
+    // Set up consent change listeners first
+    setupConsentListeners();
+
     if (document.readyState === "loading") {
       document.addEventListener("DOMContentLoaded", capture);
     } else {
