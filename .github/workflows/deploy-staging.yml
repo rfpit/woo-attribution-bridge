@@ -172,6 +172,28 @@ jobs:
             echo "Retry $i..." && sleep 2
           done
 
+      - name: Backup current plugin
+        id: backup
+        env:
+          HOST: ${{ secrets.WP_STAGING_HOST }}
+          WP_PATH: ${{ secrets.WP_STAGING_PATH }}
+        run: |
+          PLUGIN_PATH="${WP_PATH}/wp-content/plugins/woo-attribution-bridge"
+          BACKUP_PATH="${WP_PATH}/wp-content/plugins/.wab-backup-staging"
+
+          # Create backup of current plugin (if exists)
+          ssh root@${HOST} << BACKUP
+            if [ -d "${PLUGIN_PATH}" ]; then
+              rm -rf ${BACKUP_PATH}
+              cp -r ${PLUGIN_PATH} ${BACKUP_PATH}
+              echo "Backup created at ${BACKUP_PATH}"
+            else
+              echo "No existing plugin to backup"
+            fi
+          BACKUP
+
+          echo "backup_path=${BACKUP_PATH}" >> $GITHUB_OUTPUT
+
       - name: Deploy plugin via rsync
         env:
           HOST: ${{ secrets.WP_STAGING_HOST }}
@@ -193,7 +215,85 @@ jobs:
             ./src/ \
             root@${HOST}:${PLUGIN_PATH}/
 
-          echo "Plugin deployed to staging"
+          # Fix permissions (CloudPanel uses clp:clp for web files)
+          ssh root@${HOST} << PERMS
+            chown -R clp:clp ${PLUGIN_PATH}
+            find ${PLUGIN_PATH} -type d -exec chmod 755 {} \;
+            find ${PLUGIN_PATH} -type f -exec chmod 644 {} \;
+          PERMS
+
+          echo "Plugin deployed to staging with correct permissions"
+
+      - name: Verify WordPress site health
+        id: health_check
+        env:
+          HOST: ${{ secrets.WP_STAGING_HOST }}
+          SITE_URL: ${{ secrets.WP_STAGING_URL }}
+        run: |
+          echo "Waiting for WordPress to reload..."
+          sleep 5
+
+          # Check if site returns 200 (not 500 critical error)
+          CURL_CMD="curl -s -o /dev/null -w '%{http_code}' ${SITE_URL}"
+          HTTP_CODE=$(ssh root@${HOST} "${CURL_CMD}")
+
+          echo "HTTP response code: ${HTTP_CODE}"
+
+          if [ "$HTTP_CODE" -ge 500 ]; then
+            echo "CRITICAL: Site returning HTTP ${HTTP_CODE}"
+            echo "health_ok=false" >> $GITHUB_OUTPUT
+            exit 1
+          elif [ "$HTTP_CODE" -ge 400 ]; then
+            echo "WARNING: HTTP ${HTTP_CODE} (may be auth required)"
+            echo "health_ok=true" >> $GITHUB_OUTPUT
+          else
+            echo "Site healthy with HTTP ${HTTP_CODE}"
+            echo "health_ok=true" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Rollback on failure
+        if: failure() && steps.health_check.outcome == 'failure'
+        env:
+          HOST: ${{ secrets.WP_STAGING_HOST }}
+          WP_PATH: ${{ secrets.WP_STAGING_PATH }}
+          SITE_URL: ${{ secrets.WP_STAGING_URL }}
+        run: |
+          PLUGIN_PATH="${WP_PATH}/wp-content/plugins/woo-attribution-bridge"
+          BACKUP_PATH="${WP_PATH}/wp-content/plugins/.wab-backup-staging"
+
+          echo "::error::Health check failed! Rolling back..."
+
+          ssh root@${HOST} << ROLLBACK
+            if [ -d "${BACKUP_PATH}" ]; then
+              rm -rf ${PLUGIN_PATH}
+              mv ${BACKUP_PATH} ${PLUGIN_PATH}
+              echo "Rollback complete - restored previous version"
+            else
+              echo "No backup found - cannot rollback"
+              exit 1
+            fi
+          ROLLBACK
+
+          # Verify rollback worked
+          sleep 3
+          CURL_CMD="curl -s -o /dev/null -w '%{http_code}' ${SITE_URL}"
+          HTTP_CODE=$(ssh root@${HOST} "${CURL_CMD}")
+
+          if [ "$HTTP_CODE" -ge 500 ]; then
+            echo "::error::Rollback failed! Manual intervention required."
+            exit 1
+          fi
+
+          echo "::warning::Rollback successful. Site is back online."
+          echo "## ⚠️ Deployment Rolled Back" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          MSG="The staging deployment caused a critical error"
+          echo "${MSG} and was rolled back." >> $GITHUB_STEP_SUMMARY
+          MSG2="Please investigate and fix the issue"
+          echo "${MSG2} before redeploying." >> $GITHUB_STEP_SUMMARY
+
+          # Exit with error to mark workflow as failed
+          exit 1
 
   notify-success:
     name: Notify Success
