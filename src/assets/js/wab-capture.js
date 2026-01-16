@@ -320,9 +320,60 @@
   }
 
   /**
+   * Clear the attribution cookie.
+   */
+  function clearCookie() {
+    document.cookie = `${config.cookieName}=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/`;
+    log("Attribution cookie cleared");
+  }
+
+  /**
+   * Handle consent change events.
+   * Called when user accepts or rejects cookies via consent management.
+   */
+  function onConsentChange() {
+    if (hasAdvertisingConsent()) {
+      log("Consent granted, running capture");
+      capture();
+    } else {
+      log("Consent revoked, clearing cookie");
+      clearCookie();
+    }
+  }
+
+  /**
+   * Set up listeners for consent management platforms.
+   * These fire when user clicks accept/reject in the consent banner.
+   */
+  function setupConsentListeners() {
+    // CookieYes - fires when user updates consent preferences
+    document.addEventListener("cookieyes_consent_update", function (e) {
+      log("CookieYes consent updated", e.detail);
+      onConsentChange();
+    });
+
+    // Cookiebot - fires when user accepts/declines
+    if (typeof window.Cookiebot !== "undefined") {
+      window.addEventListener("CookiebotOnAccept", onConsentChange);
+      window.addEventListener("CookiebotOnDecline", onConsentChange);
+    }
+
+    // Complianz - fires on consent change
+    document.addEventListener("cmplz_status_change", onConsentChange);
+
+    // GDPR Cookie Consent - fires on consent change
+    document.addEventListener("gdpr_consent_changed", onConsentChange);
+
+    log("Consent listeners registered");
+  }
+
+  /**
    * Initialize on DOM ready.
    */
   function init() {
+    // Set up consent change listeners first
+    setupConsentListeners();
+
     if (document.readyState === "loading") {
       document.addEventListener("DOMContentLoaded", capture);
     } else {
