@@ -81,8 +81,9 @@ jobs:
         with:
           private-key: ${{ secrets.WG_PRIVATE_KEY }}
           endpoint: ${{ secrets.WG_ENDPOINT }}
-          server-public-key: ${{ secrets.WG_SERVER_PUBLIC_KEY }}
-          client-address: ${{ secrets.WG_RUNNER_ADDRESS }}
+          server-public-key: ${{ secrets.WG_PEER_PUBLIC_KEY }}
+          client-address: ${{ secrets.WG_ADDRESS }}
+          allowed-ips: ${{ secrets.WG_ALLOWED_IPS }}
 
       - name: Setup SSH key
         run: |
@@ -156,8 +157,9 @@ jobs:
         with:
           private-key: ${{ secrets.WG_PRIVATE_KEY }}
           endpoint: ${{ secrets.WG_ENDPOINT }}
-          server-public-key: ${{ secrets.WG_SERVER_PUBLIC_KEY }}
-          client-address: ${{ secrets.WG_RUNNER_ADDRESS }}
+          server-public-key: ${{ secrets.WG_PEER_PUBLIC_KEY }}
+          client-address: ${{ secrets.WG_ADDRESS }}
+          allowed-ips: ${{ secrets.WG_ALLOWED_IPS }}
 
       - name: Setup SSH key
         run: |
@@ -167,7 +169,7 @@ jobs:
           # Wait for WireGuard to stabilize, then retry keyscan
           sleep 3
           for i in 1 2 3; do
-            HOST=${{ secrets.WP_STAGING_HOST }}
+            HOST=${{ secrets.SSH_HOST }}
             ssh-keyscan -T 10 -H $HOST >> ~/.ssh/known_hosts && break
             echo "Retry $i..." && sleep 2
           done
@@ -176,8 +178,8 @@ jobs:
         id: backup
         timeout-minutes: 2
         env:
-          HOST: ${{ secrets.WP_STAGING_HOST }}
-          WP_PATH: ${{ secrets.WP_STAGING_PATH }}
+          HOST: ${{ secrets.SSH_HOST }}
+          WP_PATH: ${{ secrets.DEPLOY_PATH }}
         run: |
           PLUGIN_PATH="${WP_PATH}/wp-content/plugins/woo-attribution-bridge"
           BACKUP_PATH="${WP_PATH}/wp-content/plugins/.wab-backup-staging"
@@ -199,8 +201,8 @@ jobs:
       - name: Deploy plugin via rsync
         timeout-minutes: 5
         env:
-          HOST: ${{ secrets.WP_STAGING_HOST }}
-          WP_PATH: ${{ secrets.WP_STAGING_PATH }}
+          HOST: ${{ secrets.SSH_HOST }}
+          WP_PATH: ${{ secrets.DEPLOY_PATH }}
         run: |
           PLUGIN_PATH="${WP_PATH}/wp-content/plugins/woo-attribution-bridge"
           SSH_OPTS="-o ConnectTimeout=30 -o ServerAliveInterval=10"
@@ -231,12 +233,12 @@ jobs:
         id: health_check
         timeout-minutes: 2
         env:
-          HOST: ${{ secrets.WP_STAGING_HOST }}
-          SITE_URL: ${{ secrets.WP_STAGING_URL }}
+          HOST: ${{ secrets.SSH_HOST }}
+          SITE_URL: ${{ secrets.SITE_URL }}
         run: |
           # Skip if SITE_URL not configured
           if [ -z "${SITE_URL}" ]; then
-            echo "::warning::WP_STAGING_URL not set, skipping health check"
+            echo "::warning::SITE_URL not set, skipping health check"
             echo "health_ok=skipped" >> $GITHUB_OUTPUT
             exit 0
           fi
@@ -267,9 +269,9 @@ jobs:
         if: failure() && steps.health_check.outcome == 'failure'
         timeout-minutes: 2
         env:
-          HOST: ${{ secrets.WP_STAGING_HOST }}
-          WP_PATH: ${{ secrets.WP_STAGING_PATH }}
-          SITE_URL: ${{ secrets.WP_STAGING_URL }}
+          HOST: ${{ secrets.SSH_HOST }}
+          WP_PATH: ${{ secrets.DEPLOY_PATH }}
+          SITE_URL: ${{ secrets.SITE_URL }}
         run: |
           PLUGIN_PATH="${WP_PATH}/wp-content/plugins/woo-attribution-bridge"
           BACKUP_PATH="${WP_PATH}/wp-content/plugins/.wab-backup-staging"
