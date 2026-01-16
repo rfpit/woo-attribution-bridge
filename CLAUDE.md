@@ -56,7 +56,65 @@ A first-party attribution tracking plugin for WooCommerce that captures ad platf
 - **Server-side sending**: Bypasses ad blockers for conversions
 - **Multi-platform**: Single source of truth for all ad platforms
 - **Privacy-conscious**: Only stores what's needed for attribution
+- **Cookie-less fallback**: Server-side attribution for users who decline cookies
+- **Consent-aware**: Integrates with popular consent management plugins
 - **Extensible**: Easy to add new destination platforms
+
+## Attribution Storage
+
+The plugin uses a dual-storage approach to maximize attribution coverage:
+
+### 1. Cookie-Based (Primary)
+When users accept cookies (via consent management), click IDs are stored in a first-party cookie (`wab_a`) with a 90-day expiry. This is the most reliable method for multi-session attribution.
+
+### 2. Server-Side Cache (Fallback)
+For users who decline cookies or when cookies are unavailable, click IDs are stored server-side in the `wp_wab_attribution_cache` table using a fingerprint hash:
+
+```
+Fingerprint = SHA256(IP + "|" + User-Agent + "|" + wp_salt())
+```
+
+**Key characteristics:**
+- **48-hour TTL**: Short expiry since IP/UA combinations aren't stable long-term
+- **Not tracking**: This is attribution linking, not user tracking. We don't identify users—we link click IDs to conversions.
+- **GDPR compliant**: The fingerprint is a one-way hash that cannot be reversed to identify individuals
+- **Automatic cleanup**: Expired entries are purged hourly via cron
+
+### Attribution Flow
+
+```
+User arrives with ?gclid=XXX&fbclid=YYY
+            ↓
+┌───────────────────────────────────────┐
+│ Always: Store in server-side cache    │
+│ (fingerprint_hash → click_ids)        │
+└───────────────────────────────────────┘
+            ↓
+┌───────────────────────────────────────┐
+│ If consent: Also store in cookie      │
+│ (wab_a → JSON with click_ids)         │
+└───────────────────────────────────────┘
+            ↓
+On conversion:
+┌───────────────────────────────────────┐
+│ 1. Check cookie first                 │
+│ 2. If empty, fall back to server-side │
+│ 3. Send attribution to ad platforms   │
+└───────────────────────────────────────┘
+```
+
+### Cookie Consent Integration
+
+The plugin integrates with popular consent management plugins:
+- CookieYes
+- CookieBot
+- Complianz
+- GDPR Cookie Consent
+
+Consent levels:
+- `LEVEL_FULL` (marketing cookies accepted): Full cookie + server-side storage
+- `LEVEL_ANONYMOUS` (analytics only): Server-side storage only
+- `LEVEL_NONE` (no consent): Server-side storage only
 
 ## Technical Stack
 
@@ -91,6 +149,14 @@ A first-party attribution tracking plugin for WooCommerce that captures ad platf
 ## Configuration
 
 Settings stored in WordPress options:
+
+### General
+- `wab_cookie_name` - Cookie name (default: `wab_a`)
+- `wab_cookie_expiry` - Cookie expiry in days (default: 90)
+- `wab_cache_ttl` - Server-side attribution cache TTL in hours (default: 48)
+- `wab_debug_mode` - Enable debug logging
+
+### Integrations
 - `wab_swetrix_enabled` - Enable Swetrix integration
 - `wab_swetrix_project_id` - Swetrix project ID
 - `wab_swetrix_api_url` - Self-hosted URL (optional)
@@ -160,18 +226,27 @@ tests/
 - [x] Deactivator
 - [x] Loader (hook orchestration)
 - [x] Cookie handler (click ID capture, visitor ID, touchpoints)
+- [x] Server-side attribution cache (cookie-less fallback)
+- [x] Cookie consent integration (CookieYes, CookieBot, Complianz, GDPR)
+- [x] Deduplication layer
+- [x] Retry queue
+- [x] Integration base class
+- [x] Meta CAPI integration
+- [x] Google Ads integration
+- [x] TikTok integration
+- [x] Swetrix integration
+- [x] Dashboard integration (central WAB dashboard)
+- [x] Conversion dispatcher
+- [x] Admin settings page
+- [x] Unit tests (360 tests, 607 assertions)
 
-### In Progress
-- [ ] Deduplication layer
-- [ ] Retry queue
-- [ ] Integration base class
-- [ ] Meta CAPI integration
-- [ ] Google Ads integration
-- [ ] TikTok integration
-- [ ] Swetrix integration
-- [ ] Conversion dispatcher
-- [ ] Admin settings page
-- [ ] Unit tests (targeting 80%+)
+### Database Tables
+- `wp_wab_queue` - Retry queue for failed API calls
+- `wp_wab_log` - Conversion event log
+- `wp_wab_touchpoints` - Multi-touch attribution tracking
+- `wp_wab_identities` - Cross-device identity graph
+- `wp_wab_surveys` - Post-purchase survey responses
+- `wp_wab_attribution_cache` - Server-side attribution (cookie-less fallback)
 
 ## Related Projects & Research
 

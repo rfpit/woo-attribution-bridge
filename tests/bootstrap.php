@@ -29,6 +29,10 @@ if ( ! defined( 'DAY_IN_SECONDS' ) ) {
 	define( 'DAY_IN_SECONDS', 86400 );
 }
 
+if ( ! defined( 'HOUR_IN_SECONDS' ) ) {
+	define( 'HOUR_IN_SECONDS', 3600 );
+}
+
 if ( ! defined( 'COOKIEPATH' ) ) {
 	define( 'COOKIEPATH', '/' );
 }
@@ -364,6 +368,8 @@ require_once dirname( __DIR__ ) . '/src/integrations/class-wab-google-ads.php';
 require_once dirname( __DIR__ ) . '/src/integrations/class-wab-tiktok.php';
 require_once dirname( __DIR__ ) . '/src/integrations/class-wab-swetrix.php';
 require_once dirname( __DIR__ ) . '/src/integrations/class-wab-dashboard.php';
+
+// Load consent handler.
 require_once dirname( __DIR__ ) . '/src/includes/class-wab-consent.php';
 
 // Load test base class.

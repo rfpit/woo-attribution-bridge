@@ -181,6 +181,7 @@ class WAB_Loader {
 		// Queue processing cron.
 		add_action( 'wab_process_queue', [ $this->queue, 'process_pending' ] );
 		add_action( 'wab_cleanup_old_logs', [ $this, 'cleanup_old_logs' ] );
+		add_action( 'wab_cleanup_attribution_cache', [ 'WAB_Cookie', 'cleanup_attribution_cache' ] );
 
 		// Enqueue frontend scripts.
 		add_action( 'wp_enqueue_scripts', [ $this->public, 'enqueue_scripts' ] );
