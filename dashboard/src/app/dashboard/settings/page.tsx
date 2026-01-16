@@ -13,8 +13,22 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Loader2 } from "lucide-react";
+import { Loader2, AlertTriangle } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+
+async function resetProject(): Promise<{
+  deleted: { orders: number; attributions: number; conversionLogs: number };
+}> {
+  const response = await fetch("/api/user/reset", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+  });
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.error || "Failed to reset project");
+  }
+  return response.json();
+}
 
 async function updateProfile(data: { name: string }): Promise<void> {
   const response = await fetch("/api/user/profile", {
@@ -55,6 +69,9 @@ export default function SettingsPage() {
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
 
+  // Reset project state
+  const [showResetConfirm, setShowResetConfirm] = useState(false);
+
   const profileMutation = useMutation({
     mutationFn: updateProfile,
     onSuccess: () => {
@@ -82,6 +99,25 @@ export default function SettingsPage() {
       toast({
         title: "Password updated",
         description: "Your password has been changed successfully.",
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  const resetMutation = useMutation({
+    mutationFn: resetProject,
+    onSuccess: (data) => {
+      setShowResetConfirm(false);
+      const { orders, attributions, conversionLogs } = data.deleted;
+      toast({
+        title: "Project reset complete",
+        description: `Deleted ${orders} orders, ${attributions} attributions, and ${conversionLogs} conversion logs.`,
       });
     },
     onError: (error: Error) => {
@@ -226,7 +262,53 @@ export default function SettingsPage() {
             Irreversible actions that affect your account
           </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-4">
+        <CardContent className="space-y-6">
+          {/* Reset Project */}
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="font-medium">Reset Project Data</p>
+              <p className="text-sm text-muted-foreground">
+                Delete all orders, attributions, and conversion logs.
+                <br />
+                Store connections and integrations will be preserved.
+              </p>
+            </div>
+            {!showResetConfirm ? (
+              <Button
+                variant="outline"
+                className="border-destructive text-destructive hover:bg-destructive hover:text-destructive-foreground"
+                onClick={() => setShowResetConfirm(true)}
+              >
+                Reset Project
+              </Button>
+            ) : (
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="ghost"
+                  onClick={() => setShowResetConfirm(false)}
+                  disabled={resetMutation.isPending}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  variant="destructive"
+                  onClick={() => resetMutation.mutate()}
+                  disabled={resetMutation.isPending}
+                >
+                  {resetMutation.isPending ? (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  ) : (
+                    <AlertTriangle className="mr-2 h-4 w-4" />
+                  )}
+                  Confirm Reset
+                </Button>
+              </div>
+            )}
+          </div>
+
+          <div className="border-t" />
+
+          {/* Delete Account */}
           <div className="flex items-center justify-between">
             <div>
               <p className="font-medium">Delete Account</p>
