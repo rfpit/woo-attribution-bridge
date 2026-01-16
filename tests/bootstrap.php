@@ -364,6 +364,7 @@ require_once dirname( __DIR__ ) . '/src/integrations/class-wab-google-ads.php';
 require_once dirname( __DIR__ ) . '/src/integrations/class-wab-tiktok.php';
 require_once dirname( __DIR__ ) . '/src/integrations/class-wab-swetrix.php';
 require_once dirname( __DIR__ ) . '/src/integrations/class-wab-dashboard.php';
+require_once dirname( __DIR__ ) . '/src/includes/class-wab-consent.php';
 
 // Load test base class.
 require_once __DIR__ . '/Unit/WabTestCase.php';
