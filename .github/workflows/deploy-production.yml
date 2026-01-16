@@ -178,11 +178,20 @@ jobs:
             docker image prune -f
           DEPLOY
 
+      - name: Run database migrations
+        env:
+          HOST: ${{ secrets.DASHBOARD_HOST }}
+        run: |
+          echo "Running database migrations..."
+          ssh root@$HOST \
+            "docker exec wab-prod-dashboard npx tsx src/db/migrate.ts"
+          echo "Migrations completed"
+
       - name: Verify deployment
         env:
           HOST: ${{ secrets.DASHBOARD_HOST }}
         run: |
-          sleep 10
+          sleep 5
           curl -sf http://$HOST:3000/api/health || exit 1
           echo "Dashboard production deployment verified"
 
