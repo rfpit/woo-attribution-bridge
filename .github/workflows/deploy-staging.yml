@@ -230,12 +230,19 @@ jobs:
           HOST: ${{ secrets.WP_STAGING_HOST }}
           SITE_URL: ${{ secrets.WP_STAGING_URL }}
         run: |
+          # Skip if SITE_URL not configured
+          if [ -z "${SITE_URL}" ]; then
+            echo "::warning::WP_STAGING_URL not set, skipping health check"
+            echo "health_ok=skipped" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
           echo "Waiting for WordPress to reload..."
           sleep 5
 
           # Check if site returns 200 (not 500 critical error)
-          CURL_CMD="curl -s -o /dev/null -w '%{http_code}' ${SITE_URL}"
-          HTTP_CODE=$(ssh root@${HOST} "${CURL_CMD}")
+          CURL_CMD="curl -sL -o /dev/null -w '%{http_code}' --max-time 30"
+          HTTP_CODE=$(ssh root@${HOST} "${CURL_CMD} ${SITE_URL}")
 
           echo "HTTP response code: ${HTTP_CODE}"
 
