@@ -19,7 +19,7 @@ import {
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { formatCurrency } from "@/lib/utils";
+import { formatCurrency, parseTimestamp } from "@/lib/utils";
 import {
   ShoppingCart,
   ChevronDown,
@@ -134,7 +134,10 @@ interface Touchpoint {
 }
 
 // Format time gap between touchpoints
-function formatTimeGap(ms: number): string {
+function formatTimeGap(ms: number | null): string | null {
+  if (ms == null || isNaN(ms) || ms <= 0) {
+    return null;
+  }
   const hours = ms / (1000 * 60 * 60);
   if (hours < 1) {
     const minutes = Math.round(ms / (1000 * 60));
@@ -226,7 +229,7 @@ function JourneyTimeline({
     );
   }
 
-  const orderTime = new Date(orderDate).getTime();
+  const orderTime = parseTimestamp(orderDate);
 
   return (
     <div className="py-4 px-2">
@@ -244,17 +247,12 @@ function JourneyTimeline({
 
         <div className="space-y-3">
           {touchpoints.map((tp, idx) => {
-            const tpTime =
-              typeof tp.timestamp === "number"
-                ? tp.timestamp * 1000
-                : new Date(tp.timestamp).getTime();
+            const tpTime = parseTimestamp(tp.timestamp);
             const nextTp = touchpoints[idx + 1];
             const nextTime = nextTp
-              ? typeof nextTp.timestamp === "number"
-                ? nextTp.timestamp * 1000
-                : new Date(nextTp.timestamp).getTime()
+              ? parseTimestamp(nextTp.timestamp)
               : orderTime;
-            const timeGap = nextTime - tpTime;
+            const timeGap = tpTime && nextTime ? nextTime - tpTime : null;
 
             return (
               <div key={idx} className="relative pl-8">
@@ -288,7 +286,9 @@ function JourneyTimeline({
                         )}
                     </div>
                     <span className="text-xs text-muted-foreground">
-                      {new Date(tpTime).toLocaleString()}
+                      {tpTime
+                        ? new Date(tpTime).toLocaleString()
+                        : "Invalid Date"}
                     </span>
                   </div>
 
@@ -319,13 +319,19 @@ function JourneyTimeline({
                 </div>
 
                 {/* Time gap arrow */}
-                {idx < touchpoints.length - 1 && timeGap > 0 && (
-                  <div className="flex items-center gap-1 mt-1 ml-2 text-xs text-muted-foreground">
-                    <Clock className="h-3 w-3" />
-                    <span>{formatTimeGap(timeGap)} later</span>
-                    <ArrowRight className="h-3 w-3" />
-                  </div>
-                )}
+                {idx < touchpoints.length - 1 &&
+                  timeGap &&
+                  timeGap > 0 &&
+                  (() => {
+                    const gap = formatTimeGap(timeGap);
+                    return gap ? (
+                      <div className="flex items-center gap-1 mt-1 ml-2 text-xs text-muted-foreground">
+                        <Clock className="h-3 w-3" />
+                        <span>{gap} later</span>
+                        <ArrowRight className="h-3 w-3" />
+                      </div>
+                    ) : null;
+                  })()}
               </div>
             );
           })}
@@ -342,17 +348,21 @@ function JourneyTimeline({
                   {new Date(orderDate).toLocaleString()}
                 </span>
               </div>
-              {touchpoints.length > 0 && (
-                <div className="mt-1 text-xs text-muted-foreground">
-                  {formatTimeGap(
-                    orderTime -
-                      (typeof touchpoints[0].timestamp === "number"
-                        ? touchpoints[0].timestamp * 1000
-                        : new Date(touchpoints[0].timestamp).getTime()),
-                  )}{" "}
-                  from first touch
-                </div>
-              )}
+              {touchpoints.length > 0 &&
+                (() => {
+                  const firstTouchTime = parseTimestamp(
+                    touchpoints[0].timestamp,
+                  );
+                  const gap =
+                    firstTouchTime && orderTime
+                      ? formatTimeGap(orderTime - firstTouchTime)
+                      : null;
+                  return gap ? (
+                    <div className="mt-1 text-xs text-muted-foreground">
+                      {gap} from first touch
+                    </div>
+                  ) : null;
+                })()}
             </div>
           </div>
         </div>
