@@ -261,6 +261,61 @@ defined( 'ABSPATH' ) || exit;
 					);
 					?>
 				</table>
+
+				<h2><?php esc_html_e( 'Browser Fingerprinting', 'woo-attribution-bridge' ); ?></h2>
+				<p><?php esc_html_e( 'Browser fingerprinting enables attribution for visitors who decline cookies. Uses canvas, WebGL, and other browser characteristics to generate a privacy-preserving fingerprint.', 'woo-attribution-bridge' ); ?></p>
+				<?php
+				// Display fingerprint stats if available.
+				if ( class_exists( 'WAB_Fingerprint' ) ) {
+					$fingerprint = new WAB_Fingerprint();
+					$fp_stats = $fingerprint->get_stats();
+					if ( $fp_stats['total_fingerprints'] > 0 ) {
+						?>
+						<div class="notice notice-info inline" style="margin: 10px 0;">
+							<p>
+								<strong><?php esc_html_e( 'Fingerprint Stats:', 'woo-attribution-bridge' ); ?></strong>
+								<?php
+								printf(
+									/* translators: 1: total fingerprints, 2: attribution rate, 3: avg confidence */
+									esc_html__( '%1$d fingerprints stored, %2$s%% with attribution data, %3$s avg confidence', 'woo-attribution-bridge' ),
+									$fp_stats['total_fingerprints'],
+									$fp_stats['attribution_rate'],
+									$fp_stats['avg_confidence']
+								);
+								?>
+							</p>
+						</div>
+						<?php
+					}
+				}
+				?>
+				<table class="form-table">
+					<?php
+					WAB_Settings::render_checkbox_field(
+						'wab_fingerprint_enabled',
+						__( 'Enable Fingerprinting', 'woo-attribution-bridge' ),
+						__( 'Use browser fingerprinting as fallback for cookieless attribution', 'woo-attribution-bridge' )
+					);
+					?>
+					<tr>
+						<th scope="row"><label for="wab_fingerprint_min_confidence"><?php esc_html_e( 'Minimum Confidence', 'woo-attribution-bridge' ); ?></label></th>
+						<td>
+							<input type="number" id="wab_fingerprint_min_confidence" name="wab_fingerprint_min_confidence"
+								   value="<?php echo esc_attr( get_option( 'wab_fingerprint_min_confidence', 0.75 ) ); ?>"
+								   min="0.5" max="0.99" step="0.01" class="small-text">
+							<p class="description"><?php esc_html_e( 'Minimum confidence level (0.5-0.99) required to use a fingerprint match. Higher values mean more accuracy but fewer matches.', 'woo-attribution-bridge' ); ?></p>
+						</td>
+					</tr>
+					<tr>
+						<th scope="row"><label for="wab_fingerprint_ttl"><?php esc_html_e( 'Fingerprint TTL (days)', 'woo-attribution-bridge' ); ?></label></th>
+						<td>
+							<input type="number" id="wab_fingerprint_ttl" name="wab_fingerprint_ttl"
+								   value="<?php echo esc_attr( get_option( 'wab_fingerprint_ttl', 90 ) ); ?>"
+								   min="7" max="365" class="small-text">
+							<p class="description"><?php esc_html_e( 'How long to keep fingerprint records before deletion.', 'woo-attribution-bridge' ); ?></p>
+						</td>
+					</tr>
+				</table>
 				<?php
 				break;
 		}

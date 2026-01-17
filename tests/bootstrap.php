@@ -372,5 +372,8 @@ require_once dirname( __DIR__ ) . '/src/integrations/class-wab-dashboard.php';
 // Load consent handler.
 require_once dirname( __DIR__ ) . '/src/includes/class-wab-consent.php';
 
+// Load fingerprint handler.
+require_once dirname( __DIR__ ) . '/src/includes/class-wab-fingerprint.php';
+
 // Load test base class.
 require_once __DIR__ . '/Unit/WabTestCase.php';

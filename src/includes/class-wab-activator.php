@@ -155,6 +155,27 @@ class WAB_Activator {
 			KEY expires_at (expires_at)
 		) {$charset_collate};";
 
+		// Browser fingerprints table for client-side fingerprinting.
+		$fingerprints_table = $wpdb->prefix . 'wab_fingerprints';
+		$fingerprints_sql = "CREATE TABLE {$fingerprints_table} (
+			id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+			fingerprint_hash varchar(64) NOT NULL,
+			visitor_id varchar(64) DEFAULT NULL,
+			components text DEFAULT NULL,
+			click_ids text DEFAULT NULL,
+			utm_params text DEFAULT NULL,
+			landing_page text DEFAULT NULL,
+			referrer text DEFAULT NULL,
+			confidence decimal(3,2) DEFAULT 0.85,
+			first_seen datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			last_seen datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+			hit_count int unsigned NOT NULL DEFAULT 1,
+			PRIMARY KEY (id),
+			UNIQUE KEY fingerprint_hash (fingerprint_hash),
+			KEY visitor_id (visitor_id),
+			KEY last_seen (last_seen)
+		) {$charset_collate};";
+
 		require_once ABSPATH . 'wp-admin/includes/upgrade.php';
 
 		dbDelta( $queue_sql );
@@ -163,6 +184,7 @@ class WAB_Activator {
 		dbDelta( $identities_sql );
 		dbDelta( $surveys_sql );
 		dbDelta( $cache_sql );
+		dbDelta( $fingerprints_sql );
 	}
 
 	/**
@@ -216,6 +238,19 @@ class WAB_Activator {
 				'influencer' => 'Influencer',
 				'other'     => 'Other',
 			],
+
+			// Browser fingerprinting settings.
+			'wab_fingerprint_enabled'       => true,
+			'wab_fingerprint_components'    => [
+				'canvas'   => true,
+				'webgl'    => true,
+				'audio'    => true,
+				'screen'   => true,
+				'timezone' => true,
+				'fonts'    => false, // Disabled by default - slower
+			],
+			'wab_fingerprint_min_confidence' => 0.75,
+			'wab_fingerprint_ttl'            => 90, // days
 		];
 
 		foreach ( $defaults as $key => $value ) {
@@ -239,6 +274,10 @@ class WAB_Activator {
 
 		if ( ! wp_next_scheduled( 'wab_cleanup_attribution_cache' ) ) {
 			wp_schedule_event( time(), 'hourly', 'wab_cleanup_attribution_cache' );
+		}
+
+		if ( ! wp_next_scheduled( 'wab_cleanup_old_fingerprints' ) ) {
+			wp_schedule_event( time(), 'daily', 'wab_cleanup_old_fingerprints' );
 		}
 	}
 }

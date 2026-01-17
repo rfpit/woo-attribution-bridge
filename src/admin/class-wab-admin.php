@@ -101,6 +101,12 @@ class WAB_Admin {
 		register_setting( 'wab_general', 'wab_dedup_enabled' );
 		register_setting( 'wab_general', 'wab_queue_enabled' );
 
+		// Fingerprinting settings.
+		register_setting( 'wab_general', 'wab_fingerprint_enabled' );
+		register_setting( 'wab_general', 'wab_fingerprint_min_confidence' );
+		register_setting( 'wab_general', 'wab_fingerprint_ttl' );
+		register_setting( 'wab_general', 'wab_fingerprint_components' );
+
 		// Meta settings.
 		register_setting( 'wab_integrations', 'wab_meta_enabled' );
 		register_setting( 'wab_integrations', 'wab_meta_pixel_id' );
