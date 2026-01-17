@@ -180,11 +180,14 @@ jobs:
           DEPLOY
 
       - name: Run database migrations
+        timeout-minutes: 3
         env:
           HOST: ${{ secrets.DASHBOARD_HOST }}
         run: |
           echo "Running database migrations..."
-          ssh root@$HOST \
+          SSH_OPTS="-o ConnectTimeout=30 -o ServerAliveInterval=10"
+          SSH_OPTS="$SSH_OPTS -o BatchMode=yes"
+          ssh ${SSH_OPTS} root@$HOST \
             "docker exec wab-prod-dashboard npx tsx src/db/migrate.ts"
           echo "Migrations completed"
 
