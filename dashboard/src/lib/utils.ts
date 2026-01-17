@@ -59,8 +59,21 @@ export function parseTimestamp(
   if (timestamp instanceof Date) {
     ms = timestamp.getTime();
   } else if (typeof timestamp === "string") {
-    // ISO 8601 string
-    ms = new Date(timestamp).getTime();
+    // Check if it's a numeric string (Unix timestamp as string)
+    const numericValue = Number(timestamp);
+    if (!isNaN(numericValue) && /^\d+$/.test(timestamp)) {
+      // It's a numeric string - treat as Unix timestamp
+      if (numericValue < 1e12) {
+        // Unix seconds - convert to milliseconds
+        ms = numericValue * 1000;
+      } else {
+        // Already milliseconds
+        ms = numericValue;
+      }
+    } else {
+      // ISO 8601 string or other date format
+      ms = new Date(timestamp).getTime();
+    }
   } else if (typeof timestamp === "number") {
     // Detect if it's seconds or milliseconds
     // Timestamps before year 2001 in ms would be < 1e12

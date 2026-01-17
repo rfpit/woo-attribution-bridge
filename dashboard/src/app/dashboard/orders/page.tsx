@@ -345,7 +345,7 @@ function JourneyTimeline({
                   Conversion
                 </span>
                 <span className="text-xs text-muted-foreground">
-                  {new Date(orderDate).toLocaleString()}
+                  {orderTime ? new Date(orderTime).toLocaleString() : "Unknown"}
                 </span>
               </div>
               {touchpoints.length > 0 &&
