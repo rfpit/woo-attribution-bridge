@@ -114,6 +114,10 @@ function formatSourceName(source: string | undefined | null): string {
 }
 
 function formatDays(days: number): string {
+  // Guard against NaN/invalid values
+  if (days == null || isNaN(days)) {
+    return "N/A";
+  }
   if (days < 1) {
     const hours = Math.round(days * 24);
     if (hours < 1) {

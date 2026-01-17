@@ -4,6 +4,7 @@ import { db } from "@/db";
 import { orders, stores } from "@/db/schema";
 import { eq, and, gte, sql, or } from "drizzle-orm";
 import { subDays } from "date-fns";
+import { parseTimestamp } from "@/lib/utils";
 
 // Helper to create store filter that works around Drizzle UUID array bug
 function storeFilter(storeIds: string[]) {
@@ -208,37 +209,32 @@ export async function GET(request: Request) {
 
       // Calculate time to conversion from first touch timestamp
       const firstTouchData = attribution.first_touch || multiTouch.first_touch;
-      if (firstTouchData?.timestamp && order.dateCreated) {
-        const firstTouchTime =
-          typeof firstTouchData.timestamp === "number"
-            ? firstTouchData.timestamp * 1000 // Unix timestamp in seconds
-            : new Date(firstTouchData.timestamp).getTime();
-        const orderTime = new Date(order.dateCreated).getTime();
+      const firstTouchTime = parseTimestamp(firstTouchData?.timestamp);
+      const orderTime = parseTimestamp(order.dateCreated);
 
-        if (firstTouchTime > 0 && orderTime > firstTouchTime) {
-          const diffMs = orderTime - firstTouchTime;
-          const diffHours = diffMs / (1000 * 60 * 60);
-          const diffDays = diffHours / 24;
+      if (firstTouchTime && orderTime && orderTime > firstTouchTime) {
+        const diffMs = orderTime - firstTouchTime;
+        const diffHours = diffMs / (1000 * 60 * 60);
+        const diffDays = diffHours / 24;
 
-          timeToConversionDays.push(diffDays);
+        timeToConversionDays.push(diffDays);
 
-          // Bucket the time to conversion
-          if (diffHours < 1) {
-            timeToConversionBuckets["<1 hour"].orders++;
-            timeToConversionBuckets["<1 hour"].revenue += orderTotal;
-          } else if (diffHours < 24) {
-            timeToConversionBuckets["1-24 hours"].orders++;
-            timeToConversionBuckets["1-24 hours"].revenue += orderTotal;
-          } else if (diffDays < 7) {
-            timeToConversionBuckets["1-7 days"].orders++;
-            timeToConversionBuckets["1-7 days"].revenue += orderTotal;
-          } else if (diffDays < 30) {
-            timeToConversionBuckets["7-30 days"].orders++;
-            timeToConversionBuckets["7-30 days"].revenue += orderTotal;
-          } else {
-            timeToConversionBuckets["30+ days"].orders++;
-            timeToConversionBuckets["30+ days"].revenue += orderTotal;
-          }
+        // Bucket the time to conversion
+        if (diffHours < 1) {
+          timeToConversionBuckets["<1 hour"].orders++;
+          timeToConversionBuckets["<1 hour"].revenue += orderTotal;
+        } else if (diffHours < 24) {
+          timeToConversionBuckets["1-24 hours"].orders++;
+          timeToConversionBuckets["1-24 hours"].revenue += orderTotal;
+        } else if (diffDays < 7) {
+          timeToConversionBuckets["1-7 days"].orders++;
+          timeToConversionBuckets["1-7 days"].revenue += orderTotal;
+        } else if (diffDays < 30) {
+          timeToConversionBuckets["7-30 days"].orders++;
+          timeToConversionBuckets["7-30 days"].revenue += orderTotal;
+        } else {
+          timeToConversionBuckets["30+ days"].orders++;
+          timeToConversionBuckets["30+ days"].revenue += orderTotal;
         }
       }
 
