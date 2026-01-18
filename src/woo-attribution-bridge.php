@@ -3,7 +3,7 @@
  * Plugin Name: WooCommerce Attribution Bridge
  * Plugin URI: https://github.com/rfp/woo-attribution-bridge
  * Description: First-party attribution tracking for WooCommerce with server-side conversion APIs.
- * Version: 1.1.0
+ * Version: 1.2.0
  * Author: UruShop
  * Author URI: https://urushop.co.uk
  * License: GPL-2.0+
@@ -21,7 +21,7 @@
 defined( 'ABSPATH' ) || exit;
 
 // Plugin constants.
-define( 'WAB_VERSION', '1.1.0' );
+define( 'WAB_VERSION', '1.2.0' );
 define( 'WAB_PLUGIN_FILE', __FILE__ );
 define( 'WAB_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'WAB_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
@@ -82,6 +82,7 @@ function wab_init(): void {
 	require_once WAB_PLUGIN_DIR . 'includes/class-wab-touchpoint-tracker.php';
 	require_once WAB_PLUGIN_DIR . 'includes/class-wab-identity-resolver.php';
 	require_once WAB_PLUGIN_DIR . 'includes/class-wab-consent.php';
+	require_once WAB_PLUGIN_DIR . 'includes/class-wab-fingerprint.php';
 
 	// Load integrations.
 	require_once WAB_PLUGIN_DIR . 'integrations/class-wab-meta.php';

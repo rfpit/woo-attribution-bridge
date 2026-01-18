@@ -85,6 +85,13 @@ class WAB_Loader {
 	private WAB_REST_API $rest_api;
 
 	/**
+	 * Fingerprint handler instance.
+	 *
+	 * @var WAB_Fingerprint
+	 */
+	private WAB_Fingerprint $fingerprint;
+
+	/**
 	 * Initialize the loader.
 	 */
 	public function __construct() {
@@ -125,6 +132,9 @@ class WAB_Loader {
 
 		// REST API.
 		$this->rest_api = new WAB_REST_API();
+
+		// Browser fingerprinting for cookieless attribution.
+		$this->fingerprint = new WAB_Fingerprint();
 	}
 
 	/**

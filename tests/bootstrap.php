@@ -33,6 +33,10 @@ if ( ! defined( 'HOUR_IN_SECONDS' ) ) {
 	define( 'HOUR_IN_SECONDS', 3600 );
 }
 
+if ( ! defined( 'MINUTE_IN_SECONDS' ) ) {
+	define( 'MINUTE_IN_SECONDS', 60 );
+}
+
 if ( ! defined( 'COOKIEPATH' ) ) {
 	define( 'COOKIEPATH', '/' );
 }
@@ -371,6 +375,12 @@ require_once dirname( __DIR__ ) . '/src/integrations/class-wab-dashboard.php';
 
 // Load consent handler.
 require_once dirname( __DIR__ ) . '/src/includes/class-wab-consent.php';
+
+// Load fingerprint handler.
+require_once dirname( __DIR__ ) . '/src/includes/class-wab-fingerprint.php';
+
+// Load journey tracker.
+require_once dirname( __DIR__ ) . '/src/includes/class-wab-journey-tracker.php';
 
 // Load test base class.
 require_once __DIR__ . '/Unit/WabTestCase.php';

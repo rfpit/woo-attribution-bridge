@@ -106,8 +106,20 @@ class WAB_Touchpoint_Tracker {
 
 		$touchpoint = $this->build_touchpoint();
 
-		// Only add if there's meaningful attribution data.
-		if ( ! $this->has_attribution_data( $touchpoint ) ) {
+		// For visits with attribution data, add to touchpoints as before.
+		// For "direct" visits (no attribution), we still want to capture entry page
+		// and referrer if this is the first touchpoint.
+		$has_attribution = $this->has_attribution_data( $touchpoint );
+
+		if ( ! $has_attribution ) {
+			// If no touchpoints yet, record entry point even without attribution.
+			if ( empty( $this->touchpoints ) ) {
+				// Mark this as a direct visit entry point.
+				$touchpoint['is_direct_entry'] = true;
+				$this->touchpoints[] = $touchpoint;
+				$this->save_touchpoints();
+			}
+			// Don't record subsequent page views without attribution.
 			return;
 		}
 

@@ -227,6 +227,11 @@ class WAB_Cookie {
 	/**
 	 * Get attribution data from cookie (with server-side fallback).
 	 *
+	 * Priority:
+	 * 1. Cookie (most reliable)
+	 * 2. Server-side attribution cache (IP+UA hash)
+	 * 3. Client fingerprint (canvas, WebGL, audio, etc.)
+	 *
 	 * @return array
 	 */
 	public function get_attribution_data(): array {
@@ -240,8 +245,45 @@ class WAB_Cookie {
 			}
 		}
 
-		// Fall back to server-side attribution cache.
-		return $this->get_server_side_attribution();
+		// Fall back to server-side attribution cache (IP+UA hash).
+		$server_side = $this->get_server_side_attribution();
+		if ( ! empty( $server_side ) ) {
+			return $server_side;
+		}
+
+		// Fall back to fingerprint-based attribution.
+		return $this->get_fingerprint_attribution();
+	}
+
+	/**
+	 * Get attribution data from client fingerprint.
+	 *
+	 * Uses visitor ID to look up fingerprints if available.
+	 *
+	 * @return array Attribution data or empty array.
+	 */
+	private function get_fingerprint_attribution(): array {
+		// Check if fingerprinting is enabled.
+		if ( ! get_option( 'wab_fingerprint_enabled', true ) ) {
+			return [];
+		}
+
+		// Try to get visitor ID from cookie.
+		$visitor_id = $this->get_visitor_id();
+		if ( ! $visitor_id ) {
+			return [];
+		}
+
+		// Look up fingerprint by visitor ID.
+		if ( class_exists( 'WAB_Fingerprint' ) ) {
+			$fingerprint = new \WAB_Fingerprint();
+			$attribution = $fingerprint->get_attribution_by_visitor( $visitor_id );
+			if ( $attribution ) {
+				return $attribution;
+			}
+		}
+
+		return [];
 	}
 
 	/**

@@ -27,7 +27,22 @@ import {
   Clock,
   MousePointerClick,
   ArrowRight,
+  ExternalLink,
 } from "lucide-react";
+import {
+  ClickIdBadge,
+  getPrimaryClickId,
+  doClickIdsMatch,
+} from "@/components/click-id-badge";
+import {
+  ReferrerBadge,
+  hasReferrerSourceMismatch,
+} from "@/components/referrer-badge";
+import {
+  DataCompletenessIndicator,
+  JourneyDataSummary,
+  calculateCompleteness,
+} from "@/components/data-completeness";
 
 interface Order {
   id: string;
@@ -83,6 +98,10 @@ interface TouchpointData {
   ttclid?: string;
   msclkid?: string;
   utm_source?: string;
+  utm_medium?: string;
+  utm_campaign?: string;
+  referrer?: string;
+  landing_page?: string;
 }
 
 interface MultiTouchData {
@@ -125,9 +144,11 @@ interface Touchpoint {
   timestamp: string;
   source: string;
   landing_page?: string;
+  referrer?: string;
   gclid?: string;
   fbclid?: string;
   ttclid?: string;
+  msclkid?: string;
   utm_source?: string;
   utm_medium?: string;
   utm_campaign?: string;
@@ -175,6 +196,11 @@ function getTouchpoints(
 
   // Fallback: construct from first/last touch if available
   const result: Touchpoint[] = [];
+
+  // Get root-level referrer and landing_page as fallbacks
+  const rootReferrer = attribution.referrer as string | undefined;
+  const rootLandingPage = attribution.landing_page as string | undefined;
+
   const firstTouch = (attribution.first_touch ||
     (multiTouch?.first_touch as TouchpointData | undefined)) as
     | (TouchpointData & { timestamp?: string })
@@ -191,7 +217,12 @@ function getTouchpoints(
       gclid: firstTouch.gclid,
       fbclid: firstTouch.fbclid,
       ttclid: firstTouch.ttclid,
+      msclkid: firstTouch.msclkid,
       utm_source: firstTouch.utm_source,
+      utm_medium: firstTouch.utm_medium,
+      utm_campaign: firstTouch.utm_campaign,
+      referrer: firstTouch.referrer || rootReferrer,
+      landing_page: firstTouch.landing_page || rootLandingPage,
     });
   }
 
@@ -206,7 +237,12 @@ function getTouchpoints(
       gclid: lastTouch.gclid,
       fbclid: lastTouch.fbclid,
       ttclid: lastTouch.ttclid,
+      msclkid: lastTouch.msclkid,
       utm_source: lastTouch.utm_source,
+      utm_medium: lastTouch.utm_medium,
+      utm_campaign: lastTouch.utm_campaign,
+      referrer: lastTouch.referrer,
+      landing_page: lastTouch.landing_page,
     });
   }
 
@@ -231,14 +267,38 @@ function JourneyTimeline({
 
   const orderTime = parseTimestamp(orderDate);
 
+  // Check if first and last touchpoints have matching click IDs
+  const firstTouchpoint = touchpoints[0];
+  const lastTouchpoint = touchpoints[touchpoints.length - 1];
+  const clickIdsMatch =
+    touchpoints.length > 1
+      ? doClickIdsMatch(firstTouchpoint, lastTouchpoint)
+      : undefined;
+
   return (
     <div className="py-4 px-2">
-      <div className="flex items-center gap-2 mb-3">
-        <MousePointerClick className="h-4 w-4 text-muted-foreground" />
-        <span className="text-sm font-medium">Customer Journey</span>
-        <span className="text-xs text-muted-foreground">
-          ({touchpoints.length} touchpoint{touchpoints.length !== 1 ? "s" : ""})
-        </span>
+      <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center gap-2">
+          <MousePointerClick className="h-4 w-4 text-muted-foreground" />
+          <span className="text-sm font-medium">Customer Journey</span>
+          <span className="text-xs text-muted-foreground">
+            ({touchpoints.length} touchpoint
+            {touchpoints.length !== 1 ? "s" : ""})
+          </span>
+          {clickIdsMatch !== undefined && (
+            <Badge
+              variant={clickIdsMatch ? "outline" : "secondary"}
+              className={
+                clickIdsMatch
+                  ? "text-green-600 border-green-300"
+                  : "text-orange-600 border-orange-300"
+              }
+            >
+              {clickIdsMatch ? "Same Campaign" : "Multiple Campaigns"}
+            </Badge>
+          )}
+        </div>
+        <JourneyDataSummary touchpoints={touchpoints} />
       </div>
 
       <div className="relative">
@@ -249,6 +309,8 @@ function JourneyTimeline({
           {touchpoints.map((tp, idx) => {
             const tpTime = parseTimestamp(tp.timestamp);
             const nextTp = touchpoints[idx + 1];
+            const clickId = getPrimaryClickId(tp);
+            const completeness = calculateCompleteness(tp);
             const nextTime = nextTp
               ? parseTimestamp(nextTp.timestamp)
               : orderTime;
@@ -285,11 +347,17 @@ function JourneyTimeline({
                           </Badge>
                         )}
                     </div>
-                    <span className="text-xs text-muted-foreground">
-                      {tpTime
-                        ? new Date(tpTime).toLocaleString()
-                        : "Invalid Date"}
-                    </span>
+                    <div className="flex items-center gap-2">
+                      <DataCompletenessIndicator
+                        level={completeness}
+                        touchpoint={tp}
+                      />
+                      <span className="text-xs text-muted-foreground">
+                        {tpTime
+                          ? new Date(tpTime).toLocaleString()
+                          : "Invalid Date"}
+                      </span>
+                    </div>
                   </div>
 
                   {/* UTM details */}
@@ -301,19 +369,37 @@ function JourneyTimeline({
                     </div>
                   )}
 
-                  {/* Click IDs */}
-                  {(tp.gclid || tp.fbclid || tp.ttclid) && (
-                    <div className="mt-1 text-xs font-mono text-muted-foreground truncate">
-                      {tp.gclid && `gclid: ${tp.gclid.substring(0, 20)}...`}
-                      {tp.fbclid && `fbclid: ${tp.fbclid.substring(0, 20)}...`}
-                      {tp.ttclid && `ttclid: ${tp.ttclid.substring(0, 20)}...`}
-                    </div>
-                  )}
+                  {/* Click IDs and Referrer */}
+                  <div className="mt-2 flex flex-wrap items-center gap-2">
+                    {clickId && (
+                      <ClickIdBadge
+                        type={clickId.type}
+                        value={clickId.value}
+                        isMatching={
+                          idx === touchpoints.length - 1 &&
+                          touchpoints.length > 1
+                            ? clickIdsMatch
+                            : undefined
+                        }
+                      />
+                    )}
+                    {tp.referrer && (
+                      <ReferrerBadge
+                        referrer={tp.referrer}
+                        hasClickId={!!clickId}
+                        showMismatchWarning={hasReferrerSourceMismatch(
+                          tp.referrer,
+                          tp.source,
+                        )}
+                      />
+                    )}
+                  </div>
 
                   {/* Landing page */}
                   {tp.landing_page && (
-                    <div className="mt-1 text-xs text-muted-foreground truncate">
-                      {tp.landing_page}
+                    <div className="mt-1 text-xs text-muted-foreground truncate flex items-center gap-1">
+                      <ExternalLink className="h-3 w-3 flex-shrink-0" />
+                      <span className="truncate">{tp.landing_page}</span>
                     </div>
                   )}
                 </div>
@@ -345,7 +431,7 @@ function JourneyTimeline({
                   Conversion
                 </span>
                 <span className="text-xs text-muted-foreground">
-                  {new Date(orderDate).toLocaleString()}
+                  {orderTime ? new Date(orderTime).toLocaleString() : "Unknown"}
                 </span>
               </div>
               {touchpoints.length > 0 &&

@@ -261,6 +261,140 @@ defined( 'ABSPATH' ) || exit;
 					);
 					?>
 				</table>
+
+				<h2><?php esc_html_e( 'Browser Fingerprinting', 'woo-attribution-bridge' ); ?></h2>
+				<p><?php esc_html_e( 'Browser fingerprinting enables attribution for visitors who decline cookies. Uses canvas, WebGL, and other browser characteristics to generate a privacy-preserving fingerprint.', 'woo-attribution-bridge' ); ?></p>
+				<?php
+				// Display fingerprint stats if available.
+				if ( class_exists( 'WAB_Fingerprint' ) ) {
+					$fingerprint = new WAB_Fingerprint();
+					$fp_stats = $fingerprint->get_stats();
+					if ( $fp_stats['total_fingerprints'] > 0 ) {
+						?>
+						<div class="notice notice-info inline" style="margin: 10px 0;">
+							<p>
+								<strong><?php esc_html_e( 'Fingerprint Stats:', 'woo-attribution-bridge' ); ?></strong>
+								<?php
+								printf(
+									/* translators: 1: total fingerprints, 2: attribution rate, 3: avg confidence */
+									esc_html__( '%1$d fingerprints stored, %2$s%% with attribution data, %3$s avg confidence', 'woo-attribution-bridge' ),
+									$fp_stats['total_fingerprints'],
+									$fp_stats['attribution_rate'],
+									$fp_stats['avg_confidence']
+								);
+								?>
+							</p>
+						</div>
+						<?php
+					}
+				}
+				?>
+				<table class="form-table">
+					<?php
+					WAB_Settings::render_checkbox_field(
+						'wab_fingerprint_enabled',
+						__( 'Enable Fingerprinting', 'woo-attribution-bridge' ),
+						__( 'Use browser fingerprinting as fallback for cookieless attribution', 'woo-attribution-bridge' )
+					);
+					?>
+					<tr>
+						<th scope="row"><label for="wab_fingerprint_min_confidence"><?php esc_html_e( 'Minimum Confidence', 'woo-attribution-bridge' ); ?></label></th>
+						<td>
+							<input type="number" id="wab_fingerprint_min_confidence" name="wab_fingerprint_min_confidence"
+								   value="<?php echo esc_attr( get_option( 'wab_fingerprint_min_confidence', 0.75 ) ); ?>"
+								   min="0.5" max="0.99" step="0.01" class="small-text">
+							<p class="description"><?php esc_html_e( 'Minimum confidence level (0.5-0.99) required to use a fingerprint match. Higher values mean more accuracy but fewer matches.', 'woo-attribution-bridge' ); ?></p>
+						</td>
+					</tr>
+					<tr>
+						<th scope="row"><label for="wab_fingerprint_ttl"><?php esc_html_e( 'Fingerprint TTL (days)', 'woo-attribution-bridge' ); ?></label></th>
+						<td>
+							<input type="number" id="wab_fingerprint_ttl" name="wab_fingerprint_ttl"
+								   value="<?php echo esc_attr( get_option( 'wab_fingerprint_ttl', 90 ) ); ?>"
+								   min="7" max="365" class="small-text">
+							<p class="description"><?php esc_html_e( 'How long to keep fingerprint records before deletion.', 'woo-attribution-bridge' ); ?></p>
+						</td>
+					</tr>
+				</table>
+
+				<h2><?php esc_html_e( 'Journey Tracking', 'woo-attribution-bridge' ); ?></h2>
+				<p><?php esc_html_e( 'Track complete customer journeys including all page views, not just marketing touchpoints. This enables showing entry points and referrers for "direct" orders.', 'woo-attribution-bridge' ); ?></p>
+				<?php
+				// Display journey stats if available.
+				global $wpdb;
+				$sessions_table = $wpdb->prefix . 'wab_sessions';
+				$page_views_table = $wpdb->prefix . 'wab_page_views';
+
+				// Check if tables exist before querying.
+				$sessions_exists = $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $sessions_table ) );
+				$page_views_exists = $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $page_views_table ) );
+
+				if ( $sessions_exists && $page_views_exists ) {
+					$total_sessions = $wpdb->get_var( "SELECT COUNT(*) FROM {$sessions_table}" );
+					$total_page_views = $wpdb->get_var( "SELECT COUNT(*) FROM {$page_views_table}" );
+					$today_sessions = $wpdb->get_var(
+						$wpdb->prepare(
+							"SELECT COUNT(*) FROM {$sessions_table} WHERE started_at >= %s",
+							gmdate( 'Y-m-d 00:00:00' )
+						)
+					);
+
+					if ( $total_sessions > 0 ) {
+						?>
+						<div class="notice notice-info inline" style="margin: 10px 0;">
+							<p>
+								<strong><?php esc_html_e( 'Journey Stats:', 'woo-attribution-bridge' ); ?></strong>
+								<?php
+								printf(
+									/* translators: 1: total sessions, 2: today sessions, 3: total page views */
+									esc_html__( '%1$s total sessions (%2$s today), %3$s page views tracked', 'woo-attribution-bridge' ),
+									number_format( $total_sessions ),
+									number_format( $today_sessions ),
+									number_format( $total_page_views )
+								);
+								?>
+							</p>
+						</div>
+						<?php
+					}
+				}
+				?>
+				<table class="form-table">
+					<?php
+					WAB_Settings::render_checkbox_field(
+						'wab_journey_tracking_enabled',
+						__( 'Enable Journey Tracking', 'woo-attribution-bridge' ),
+						__( 'Track page views and build complete customer journeys', 'woo-attribution-bridge' )
+					);
+					?>
+					<tr>
+						<th scope="row"><label for="wab_journey_session_timeout"><?php esc_html_e( 'Session Timeout (minutes)', 'woo-attribution-bridge' ); ?></label></th>
+						<td>
+							<input type="number" id="wab_journey_session_timeout" name="wab_journey_session_timeout"
+								   value="<?php echo esc_attr( get_option( 'wab_journey_session_timeout', 30 ) ); ?>"
+								   min="5" max="120" class="small-text">
+							<p class="description"><?php esc_html_e( 'Inactivity timeout before starting a new session (5-120 minutes).', 'woo-attribution-bridge' ); ?></p>
+						</td>
+					</tr>
+					<tr>
+						<th scope="row"><label for="wab_journey_max_pages_per_session"><?php esc_html_e( 'Max Pages per Session', 'woo-attribution-bridge' ); ?></label></th>
+						<td>
+							<input type="number" id="wab_journey_max_pages_per_session" name="wab_journey_max_pages_per_session"
+								   value="<?php echo esc_attr( get_option( 'wab_journey_max_pages_per_session', 50 ) ); ?>"
+								   min="10" max="200" class="small-text">
+							<p class="description"><?php esc_html_e( 'Maximum page views to record per session (10-200).', 'woo-attribution-bridge' ); ?></p>
+						</td>
+					</tr>
+					<tr>
+						<th scope="row"><label for="wab_journey_retention_days"><?php esc_html_e( 'Data Retention (days)', 'woo-attribution-bridge' ); ?></label></th>
+						<td>
+							<input type="number" id="wab_journey_retention_days" name="wab_journey_retention_days"
+								   value="<?php echo esc_attr( get_option( 'wab_journey_retention_days', 90 ) ); ?>"
+								   min="7" max="365" class="small-text">
+							<p class="description"><?php esc_html_e( 'How long to keep journey data before automatic cleanup (7-365 days).', 'woo-attribution-bridge' ); ?></p>
+						</td>
+					</tr>
+				</table>
 				<?php
 				break;
 		}
