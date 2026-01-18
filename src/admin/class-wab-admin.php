@@ -107,6 +107,12 @@ class WAB_Admin {
 		register_setting( 'wab_general', 'wab_fingerprint_ttl' );
 		register_setting( 'wab_general', 'wab_fingerprint_components' );
 
+		// Journey tracking settings.
+		register_setting( 'wab_general', 'wab_journey_tracking_enabled' );
+		register_setting( 'wab_general', 'wab_journey_retention_days' );
+		register_setting( 'wab_general', 'wab_journey_max_pages_per_session' );
+		register_setting( 'wab_general', 'wab_journey_session_timeout' );
+
 		// Meta settings.
 		register_setting( 'wab_integrations', 'wab_meta_enabled' );
 		register_setting( 'wab_integrations', 'wab_meta_pixel_id' );
