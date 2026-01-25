@@ -1,5 +1,7 @@
 "use client";
 
+import { Suspense, useEffect } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import {
@@ -20,6 +22,16 @@ interface AdPlatformConnection {
   status: string;
   createdAt: string;
 }
+
+// Map platform IDs to their OAuth endpoints and DB values
+const PLATFORM_CONFIG: Record<
+  string,
+  { oauthPath: string; dbPlatform: string }
+> = {
+  google: { oauthPath: "/api/auth/google-ads", dbPlatform: "google_ads" },
+  meta: { oauthPath: "/api/auth/meta-ads", dbPlatform: "meta_ads" },
+  tiktok: { oauthPath: "/api/auth/tiktok-ads", dbPlatform: "tiktok_ads" },
+};
 
 const PLATFORMS = [
   {
@@ -102,8 +114,10 @@ function PlatformCard({
   connection?: AdPlatformConnection;
   onDisconnect: (id: string) => void;
 }) {
+  const router = useRouter();
   const { toast } = useToast();
   const isConnected = !!connection && connection.status === "active";
+  const needsReauth = connection?.status === "needs_reauth";
 
   const disconnectMutation = useMutation({
     mutationFn: () => disconnectPlatform(connection!.id),
@@ -124,12 +138,26 @@ function PlatformCard({
   });
 
   const handleConnect = () => {
-    // In production, this would redirect to the OAuth flow
-    // For now, show a placeholder message
-    toast({
-      title: "Coming Soon",
-      description: `${platform.name} OAuth integration is coming soon.`,
-    });
+    const config = PLATFORM_CONFIG[platform.id];
+    if (!config) {
+      toast({
+        title: "Coming Soon",
+        description: `${platform.name} OAuth integration is coming soon.`,
+      });
+      return;
+    }
+
+    // Only Google Ads is implemented for now
+    if (platform.id !== "google") {
+      toast({
+        title: "Coming Soon",
+        description: `${platform.name} OAuth integration is coming soon.`,
+      });
+      return;
+    }
+
+    // Redirect to OAuth endpoint
+    router.push(config.oauthPath);
   };
 
   return (
@@ -147,6 +175,11 @@ function PlatformCard({
             <div className="flex items-center gap-2 text-green-600 dark:text-green-400">
               <Check className="h-5 w-5" />
               <span className="text-sm font-medium">Connected</span>
+            </div>
+          ) : needsReauth ? (
+            <div className="flex items-center gap-2 text-amber-600 dark:text-amber-400">
+              <X className="h-5 w-5" />
+              <span className="text-sm font-medium">Needs Reconnection</span>
             </div>
           ) : (
             <div className="flex items-center gap-2 text-muted-foreground">
@@ -178,6 +211,31 @@ function PlatformCard({
               )}
             </Button>
           </div>
+        ) : needsReauth ? (
+          <div className="space-y-3">
+            <p className="text-sm text-amber-600 dark:text-amber-400">
+              Your connection has expired. Please reconnect to continue syncing
+              data.
+            </p>
+            <div className="flex gap-2">
+              <Button onClick={handleConnect} className="flex-1">
+                Reconnect
+                <ExternalLink className="ml-2 h-4 w-4" />
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => disconnectMutation.mutate()}
+                disabled={disconnectMutation.isPending}
+              >
+                {disconnectMutation.isPending ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  "Remove"
+                )}
+              </Button>
+            </div>
+          </div>
         ) : (
           <Button onClick={handleConnect} className="w-full">
             Connect {platform.name}
@@ -189,9 +247,47 @@ function PlatformCard({
   );
 }
 
+// Separate component that handles OAuth redirect params (requires Suspense)
+function OAuthRedirectHandler({ refetch }: { refetch: () => void }) {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const { toast } = useToast();
+
+  useEffect(() => {
+    const success = searchParams.get("success");
+    const error = searchParams.get("error");
+    const platform = searchParams.get("platform");
+
+    if (success === "true") {
+      const platformName =
+        PLATFORMS.find((p) => PLATFORM_CONFIG[p.id]?.dbPlatform === platform)
+          ?.name || "Ad Platform";
+      toast({
+        title: "Connected Successfully",
+        description: `${platformName} has been connected to your account.`,
+      });
+      // Refetch connections to show the new one
+      refetch();
+      // Clear the URL params
+      router.replace("/dashboard/platforms");
+    } else if (error) {
+      toast({
+        title: "Connection Failed",
+        description: decodeURIComponent(error),
+        variant: "destructive",
+      });
+      // Clear the URL params
+      router.replace("/dashboard/platforms");
+    }
+  }, [searchParams, toast, router, refetch]);
+
+  return null;
+}
+
 export default function PlatformsPage() {
   const queryClient = useQueryClient();
-  const { data, isLoading } = useQuery({
+
+  const { data, isLoading, refetch } = useQuery({
     queryKey: ["ad-platforms"],
     queryFn: fetchConnections,
   });
@@ -210,11 +306,18 @@ export default function PlatformsPage() {
 
   const connections = data?.connections || [];
 
-  const getConnection = (platformId: string) =>
-    connections.find((c) => c.platform === platformId);
+  const getConnection = (platformId: string) => {
+    const dbPlatform = PLATFORM_CONFIG[platformId]?.dbPlatform;
+    return connections.find((c) => c.platform === dbPlatform);
+  };
 
   return (
     <div className="space-y-6">
+      {/* Handle OAuth redirects with Suspense boundary */}
+      <Suspense fallback={null}>
+        <OAuthRedirectHandler refetch={refetch} />
+      </Suspense>
+
       <div>
         <h1 className="text-3xl font-bold">Ad Platforms</h1>
         <p className="text-muted-foreground">
