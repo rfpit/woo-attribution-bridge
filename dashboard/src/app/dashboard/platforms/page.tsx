@@ -29,8 +29,8 @@ const PLATFORM_CONFIG: Record<
   { oauthPath: string; dbPlatform: string }
 > = {
   google: { oauthPath: "/api/auth/google-ads", dbPlatform: "google_ads" },
-  meta: { oauthPath: "/api/auth/meta-ads", dbPlatform: "meta_ads" },
-  tiktok: { oauthPath: "/api/auth/tiktok-ads", dbPlatform: "tiktok_ads" },
+  meta: { oauthPath: "/api/auth/meta", dbPlatform: "meta_ads" },
+  tiktok: { oauthPath: "/api/auth/tiktok", dbPlatform: "tiktok_ads" },
 };
 
 const PLATFORMS = [
@@ -140,15 +140,6 @@ function PlatformCard({
   const handleConnect = () => {
     const config = PLATFORM_CONFIG[platform.id];
     if (!config) {
-      toast({
-        title: "Coming Soon",
-        description: `${platform.name} OAuth integration is coming soon.`,
-      });
-      return;
-    }
-
-    // Only Google Ads is implemented for now
-    if (platform.id !== "google") {
       toast({
         title: "Coming Soon",
         description: `${platform.name} OAuth integration is coming soon.`,
