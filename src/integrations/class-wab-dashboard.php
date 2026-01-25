@@ -143,6 +143,28 @@ class WAB_Dashboard extends WAB_Integration {
 		$survey_response = $order->get_meta( '_wab_survey_response' );
 		$survey_source   = $order->get_meta( '_wab_survey_source' );
 
+		// Get touchpoints and multi-touch attribution data.
+		$touchpoints         = $order->get_meta( '_wab_touchpoints' );
+		$multi_touch_models  = $order->get_meta( '_wab_attributions' );
+
+		// Get journey data.
+		$journey_data = $order->get_meta( '_wab_journey' );
+
+		// Enrich attribution with touchpoints and multi-touch data.
+		$enriched_attribution = ! empty( $attribution ) ? $attribution : [];
+		if ( ! empty( $touchpoints ) && is_array( $touchpoints ) ) {
+			$enriched_attribution['touchpoints'] = $touchpoints;
+		}
+		if ( ! empty( $multi_touch_models ) && is_array( $multi_touch_models ) ) {
+			$enriched_attribution['multi_touch'] = $multi_touch_models;
+		}
+
+		// Build journey payload.
+		$journey_payload = null;
+		if ( ! empty( $journey_data ) && is_array( $journey_data ) ) {
+			$journey_payload = $this->build_journey_payload( $journey_data );
+		}
+
 		return [
 			'event' => $event_type,
 			'order' => [
@@ -158,7 +180,8 @@ class WAB_Dashboard extends WAB_Integration {
 				'customer_email_hash' => $user_data['email_hash'],
 				'is_new_customer'     => $this->is_new_customer( $order ),
 				'payment_method'      => $order->get_payment_method(),
-				'attribution'         => ! empty( $attribution ) ? $attribution : null,
+				'attribution'         => ! empty( $enriched_attribution ) ? $enriched_attribution : null,
+				'journey'             => $journey_payload,
 				'survey_response'     => $survey_response ?: null,
 				'survey_source'       => $survey_source ?: null,
 				'date_created'        => $order->get_date_created()->format( 'c' ),
@@ -166,6 +189,88 @@ class WAB_Dashboard extends WAB_Integration {
 					? $order->get_date_completed()->format( 'c' )
 					: null,
 			],
+		];
+	}
+
+	/**
+	 * Build journey payload from stored journey data.
+	 *
+	 * @param array $journey_data Journey data from order meta.
+	 * @return array Journey payload.
+	 */
+	private function build_journey_payload( array $journey_data ): array {
+		$metrics = $journey_data['metrics'] ?? [];
+		$current = $journey_data['current_session'] ?? [];
+		$previous = $journey_data['previous_sessions'] ?? [];
+
+		// Build sessions array with page views.
+		$sessions = [];
+
+		// Add current session.
+		if ( ! empty( $current ) ) {
+			$sessions[] = $this->format_session_for_payload( $current );
+		}
+
+		// Add previous sessions.
+		foreach ( $previous as $session ) {
+			$sessions[] = $this->format_session_for_payload( $session );
+		}
+
+		return [
+			'sessions' => $sessions,
+			'metrics'  => [
+				'total_sessions'           => $metrics['total_sessions'] ?? 0,
+				'total_page_views'         => $metrics['total_page_views'] ?? 0,
+				'products_viewed'          => $metrics['products_viewed'] ?? 0,
+				'time_to_purchase_seconds' => $metrics['time_to_purchase_seconds'] ?? null,
+				'first_visit'              => $metrics['first_visit'] ?? null,
+				'entry_page'               => $metrics['entry_page'] ?? null,
+				'entry_referrer'           => $metrics['entry_referrer'] ?? null,
+			],
+		];
+	}
+
+	/**
+	 * Format a session for the payload.
+	 *
+	 * @param array $session_data Session data.
+	 * @return array Formatted session.
+	 */
+	private function format_session_for_payload( array $session_data ): array {
+		$session     = $session_data['session'] ?? [];
+		$page_views  = $session_data['page_views'] ?? [];
+		$cart_events = $session_data['cart_events'] ?? [];
+
+		return [
+			'session_id'      => $session['session_id'] ?? null,
+			'started_at'      => $session['started_at'] ?? null,
+			'entry_page'      => $session['entry_page'] ?? null,
+			'entry_referrer'  => $session['entry_referrer'] ?? null,
+			'page_count'      => $session['page_count'] ?? 0,
+			'has_attribution' => (bool) ( $session['has_attribution'] ?? false ),
+			'page_views'      => array_map(
+				function ( $pv ) {
+					return [
+						'page_url'   => $pv['page_url'] ?? null,
+						'page_type'  => $pv['page_type'] ?? 'other',
+						'page_title' => $pv['page_title'] ?? null,
+						'product_id' => $pv['product_id'] ?? null,
+						'viewed_at'  => $pv['viewed_at'] ?? null,
+					];
+				},
+				$page_views
+			),
+			'cart_events'     => array_map(
+				function ( $ce ) {
+					return [
+						'event_type' => $ce['event_type'] ?? null,
+						'product_id' => $ce['product_id'] ?? null,
+						'quantity'   => $ce['quantity'] ?? 1,
+						'created_at' => $ce['created_at'] ?? null,
+					];
+				},
+				$cart_events
+			),
 		];
 	}
 

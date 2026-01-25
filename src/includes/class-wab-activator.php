@@ -176,6 +176,53 @@ class WAB_Activator {
 			KEY last_seen (last_seen)
 		) {$charset_collate};";
 
+		// Sessions table for journey tracking.
+		$sessions_table = $wpdb->prefix . 'wab_sessions';
+		$sessions_sql = "CREATE TABLE {$sessions_table} (
+			id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+			session_id varchar(64) NOT NULL,
+			visitor_id varchar(64) NOT NULL,
+			started_at datetime NOT NULL,
+			last_activity datetime NOT NULL,
+			entry_page varchar(512) DEFAULT NULL,
+			entry_referrer varchar(512) DEFAULT NULL,
+			page_count int unsigned NOT NULL DEFAULT 0,
+			has_attribution tinyint(1) NOT NULL DEFAULT 0,
+			PRIMARY KEY (id),
+			UNIQUE KEY session_id (session_id),
+			KEY visitor_id (visitor_id),
+			KEY started_at (started_at)
+		) {$charset_collate};";
+
+		// Page views table for journey tracking.
+		$page_views_table = $wpdb->prefix . 'wab_page_views';
+		$page_views_sql = "CREATE TABLE {$page_views_table} (
+			id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+			session_id varchar(64) NOT NULL,
+			page_url varchar(512) NOT NULL,
+			page_type varchar(20) NOT NULL DEFAULT 'other',
+			page_title varchar(255) DEFAULT NULL,
+			product_id bigint(20) unsigned DEFAULT NULL,
+			viewed_at datetime NOT NULL,
+			PRIMARY KEY (id),
+			KEY session_id (session_id),
+			KEY viewed_at (viewed_at)
+		) {$charset_collate};";
+
+		// Cart events table for journey tracking.
+		$cart_events_table = $wpdb->prefix . 'wab_cart_events';
+		$cart_events_sql = "CREATE TABLE {$cart_events_table} (
+			id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+			session_id varchar(64) NOT NULL,
+			event_type varchar(30) NOT NULL,
+			product_id bigint(20) unsigned NOT NULL,
+			quantity int unsigned NOT NULL DEFAULT 1,
+			created_at datetime NOT NULL,
+			PRIMARY KEY (id),
+			KEY session_id (session_id),
+			KEY created_at (created_at)
+		) {$charset_collate};";
+
 		require_once ABSPATH . 'wp-admin/includes/upgrade.php';
 
 		dbDelta( $queue_sql );
@@ -185,6 +232,9 @@ class WAB_Activator {
 		dbDelta( $surveys_sql );
 		dbDelta( $cache_sql );
 		dbDelta( $fingerprints_sql );
+		dbDelta( $sessions_sql );
+		dbDelta( $page_views_sql );
+		dbDelta( $cart_events_sql );
 	}
 
 	/**
@@ -251,6 +301,12 @@ class WAB_Activator {
 			],
 			'wab_fingerprint_min_confidence' => 0.75,
 			'wab_fingerprint_ttl'            => 90, // days
+
+			// Journey tracking settings.
+			'wab_journey_tracking_enabled'     => true,
+			'wab_journey_retention_days'       => 90, // days
+			'wab_journey_max_pages_per_session' => 50,
+			'wab_journey_session_timeout'      => 30, // minutes
 		];
 
 		foreach ( $defaults as $key => $value ) {
@@ -278,6 +334,10 @@ class WAB_Activator {
 
 		if ( ! wp_next_scheduled( 'wab_cleanup_old_fingerprints' ) ) {
 			wp_schedule_event( time(), 'daily', 'wab_cleanup_old_fingerprints' );
+		}
+
+		if ( ! wp_next_scheduled( 'wab_cleanup_old_journeys' ) ) {
+			wp_schedule_event( time(), 'hourly', 'wab_cleanup_old_journeys' );
 		}
 	}
 }

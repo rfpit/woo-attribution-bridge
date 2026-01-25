@@ -255,6 +255,30 @@ export const conversionLogs = pgTable(
   }),
 );
 
+// Pending OAuth tokens (temporary storage during account selection)
+export const pendingOAuthTokens = pgTable(
+  "pending_oauth_tokens",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    platform: varchar("platform", { length: 50 }).notNull(), // google_ads, meta_ads, tiktok_ads
+    accessToken: text("access_token").notNull(), // Encrypted
+    refreshToken: text("refresh_token"), // Encrypted
+    tokenExpiresAt: timestamp("token_expires_at", { mode: "date" }),
+    accounts: jsonb("accounts"), // List of accessible accounts [{id, name, currency, timezone}]
+    createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
+    expiresAt: timestamp("expires_at", { mode: "date" }).notNull(), // Auto-cleanup after 10 minutes
+  },
+  (table) => ({
+    userIdIdx: index("pending_oauth_tokens_user_id_idx").on(table.userId),
+    expiresAtIdx: index("pending_oauth_tokens_expires_at_idx").on(
+      table.expiresAt,
+    ),
+  }),
+);
+
 // Marketplace connections (Amazon, eBay, Etsy)
 export const marketplaceConnections = pgTable(
   "marketplace_connections",
@@ -725,3 +749,9 @@ export type MarketingSyncLogSelect = typeof marketingSyncLogs.$inferSelect;
 export type MarketingSyncLogInsert = typeof marketingSyncLogs.$inferInsert;
 export type MarketingEventSelect = typeof marketingEvents.$inferSelect;
 export type MarketingEventInsert = typeof marketingEvents.$inferInsert;
+export type PendingOAuthTokenSelect = typeof pendingOAuthTokens.$inferSelect;
+export type PendingOAuthTokenInsert = typeof pendingOAuthTokens.$inferInsert;
+export type AdPlatformConnectionSelect =
+  typeof adPlatformConnections.$inferSelect;
+export type AdPlatformConnectionInsert =
+  typeof adPlatformConnections.$inferInsert;
