@@ -36,7 +36,7 @@ jobs:
 
       - name: Log in to Gitea Container Registry
         run: |
-          echo "${{ secrets.GITEA_TOKEN }}" | \
+          echo "${{ secrets.REGISTRY_TOKEN }}" | \
             docker login ${{ env.REGISTRY }} \
             -u ${{ gitea.actor }} --password-stdin
 
@@ -77,7 +77,7 @@ jobs:
             cd /opt/wab
 
             # Login to Gitea registry
-            echo "${{ secrets.GITEA_TOKEN }}" | \
+            echo "${{ secrets.REGISTRY_TOKEN }}" | \
               docker login ${{ env.REGISTRY }} \
               -u ${{ gitea.actor }} --password-stdin
 
