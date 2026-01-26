@@ -186,15 +186,22 @@ export async function fetchAccessibleCustomers(
 ): Promise<string[]> {
   const config = getConfig();
 
-  const response = await fetch(
-    `${GOOGLE_ADS_API_URL}/customers:listAccessibleCustomers`,
-    {
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-        "developer-token": config.developerToken,
-      },
-    },
+  const url = `${GOOGLE_ADS_API_URL}/customers:listAccessibleCustomers`;
+  console.log("Fetching accessible customers from:", url);
+  console.log(
+    "Using developer token:",
+    config.developerToken.substring(0, 8) + "...",
   );
+
+  const response = await fetch(url, {
+    method: "GET",
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      "developer-token": config.developerToken,
+    },
+  });
+
+  console.log("Response status:", response.status, response.statusText);
 
   if (!response.ok) {
     const errorData = await response.json().catch(() => ({}));
