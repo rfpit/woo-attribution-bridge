@@ -70,13 +70,16 @@ jobs:
             docker push ${IMAGE}:latest
             docker push ${IMAGE}:${{ gitea.sha }}
 
-            # Deploy
+            # Deploy with production env file
             cd /opt/wab
-            docker compose -p wab-prod -f docker-compose.production.yml pull
-            docker compose -p wab-prod -f docker-compose.production.yml up -d
+            docker compose -p wab-prod --env-file .env.production \
+              -f docker-compose.production.yml pull
+            docker compose -p wab-prod --env-file .env.production \
+              -f docker-compose.production.yml up -d
 
             # Show status
-            docker compose -p wab-prod -f docker-compose.production.yml ps
+            docker compose -p wab-prod --env-file .env.production \
+              -f docker-compose.production.yml ps
 
             # Cleanup
             rm -rf /tmp/wab-build

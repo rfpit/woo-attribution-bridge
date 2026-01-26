@@ -71,13 +71,16 @@ jobs:
             docker push ${IMAGE}:develop
             docker push ${IMAGE}:develop-${{ gitea.sha }}
 
-            # Deploy
+            # Deploy with staging env file
             cd /opt/wab
-            docker compose -p wab-staging -f docker-compose.staging.yml pull
-            docker compose -p wab-staging -f docker-compose.staging.yml up -d
+            docker compose -p wab-staging --env-file .env.staging \
+              -f docker-compose.staging.yml pull
+            docker compose -p wab-staging --env-file .env.staging \
+              -f docker-compose.staging.yml up -d
 
             # Show status
-            docker compose -p wab-staging -f docker-compose.staging.yml ps
+            docker compose -p wab-staging --env-file .env.staging \
+              -f docker-compose.staging.yml ps
 
             # Cleanup
             rm -rf /tmp/wab-build
