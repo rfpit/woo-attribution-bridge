@@ -2,8 +2,8 @@
 # Deploy to Production
 #
 # Deploys to production environment on push to main branch
-# - Dashboard: Docker image to production server
-# - WordPress Plugin: rsync to UruShop production server
+# - Dashboard: Build and deploy Docker image on server
+# - WordPress Plugin: Deploy via SSH/tar
 #
 # Since Gitea is on the local network, no VPN is needed
 
@@ -26,53 +26,14 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  build-dashboard:
-    name: Build Dashboard Image
+  deploy-dashboard:
+    name: Build and Deploy Dashboard
     runs-on: ubuntu-latest
-    outputs:
-      version: ${{ steps.version.outputs.version }}
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
-      - name: Get version
-        id: version
-        run: |
-          if [[ "${{ gitea.ref }}" == refs/tags/v* ]]; then
-            VERSION="${{ gitea.ref_name }}"
-          else
-            VERSION="latest"
-          fi
-          echo "version=$VERSION" >> $GITHUB_OUTPUT
-
-      - name: Log in to Gitea Container Registry
-        run: |
-          echo "${{ secrets.REGISTRY_TOKEN }}" | \
-            docker login ${{ env.REGISTRY }} \
-            -u ${{ gitea.actor }} --password-stdin
-
-      - name: Build and tag image
-        run: |
-          cd dashboard
-          IMAGE=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
-          docker build -t ${IMAGE}:latest .
-          docker tag ${IMAGE}:latest ${IMAGE}:${{ gitea.sha }}
-
-      - name: Push image
-        run: |
-          IMAGE=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
-          docker push ${IMAGE}:latest
-          docker push ${IMAGE}:${{ gitea.sha }}
-
-  deploy-dashboard:
-    name: Deploy Dashboard to Production
-    runs-on: ubuntu-latest
-    needs: build-dashboard
-
-    steps:
       - name: Setup SSH key
         run: |
           mkdir -p ~/.ssh
@@ -80,34 +41,45 @@ jobs:
           chmod 600 ~/.ssh/id_ed25519
           ssh-keyscan -H ${{ secrets.DASHBOARD_HOST }} >> ~/.ssh/known_hosts
 
-      - name: Deploy to production server
+      - name: Copy dashboard source to server
+        env:
+          HOST: ${{ secrets.DASHBOARD_HOST }}
+        run: |
+          ssh root@$HOST "mkdir -p /tmp/wab-build"
+          tar -czf - dashboard/ | ssh root@$HOST "tar -xzf - -C /tmp/wab-build"
+
+      - name: Build and deploy on server
         env:
           HOST: ${{ secrets.DASHBOARD_HOST }}
         run: |
           ssh root@$HOST << 'DEPLOY'
             set -e
-            cd /opt/wab
+            cd /tmp/wab-build/dashboard
 
             # Login to Gitea registry
             echo "${{ secrets.REGISTRY_TOKEN }}" | \
               docker login ${{ env.REGISTRY }} \
               -u ${{ gitea.actor }} --password-stdin
 
-            # Pull latest image
+            # Build image
             IMAGE=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
-            docker pull ${IMAGE}:latest
+            docker build -t ${IMAGE}:latest .
+            docker tag ${IMAGE}:latest ${IMAGE}:${{ gitea.sha }}
 
-            # Restart production stack
-            docker compose -p wab-prod \
-              -f docker-compose.production.yml pull
-            docker compose -p wab-prod \
-              -f docker-compose.production.yml up -d
+            # Push to registry
+            docker push ${IMAGE}:latest
+            docker push ${IMAGE}:${{ gitea.sha }}
+
+            # Deploy
+            cd /opt/wab
+            docker compose -p wab-prod -f docker-compose.production.yml pull
+            docker compose -p wab-prod -f docker-compose.production.yml up -d
 
             # Show status
-            docker compose -p wab-prod \
-              -f docker-compose.production.yml ps
+            docker compose -p wab-prod -f docker-compose.production.yml ps
 
-            # Cleanup old images (keep last 3)
+            # Cleanup
+            rm -rf /tmp/wab-build
             docker image prune -f
           DEPLOY
 
@@ -126,7 +98,7 @@ jobs:
           HOST: ${{ secrets.DASHBOARD_HOST }}
         run: |
           sleep 5
-          curl -sf http://$HOST:3000/api/health || exit 1
+          ssh root@$HOST "curl -sf http://localhost:3000/api/health" || exit 1
           echo "Dashboard production deployment verified"
 
   deploy-plugin:
@@ -144,9 +116,8 @@ jobs:
           chmod 600 ~/.ssh/id_ed25519
           ssh-keyscan -H ${{ secrets.SSH_HOST }} >> ~/.ssh/known_hosts
 
-      - name: Backup current plugin
-        id: backup
-        timeout-minutes: 2
+      - name: Backup and deploy plugin
+        timeout-minutes: 5
         env:
           HOST: ${{ secrets.SSH_HOST }}
           WP_PATH: ${{ secrets.DEPLOY_PATH }}
@@ -155,42 +126,18 @@ jobs:
           PLUGIN_PATH="${WP_PATH}/wp-content/plugins/${PLUGIN}"
           BACKUP_PATH="${WP_PATH}/wp-content/plugins/.wab-backup-prod"
 
-          # Create backup of current plugin (if exists)
+          # Create backup on server (if plugin exists)
           ssh root@${HOST} << BACKUP
             if [ -d "${PLUGIN_PATH}" ]; then
               rm -rf ${BACKUP_PATH}
               cp -r ${PLUGIN_PATH} ${BACKUP_PATH}
-              echo "Backup created at ${BACKUP_PATH}"
-            else
-              echo "No existing plugin to backup"
+              echo "Backup created"
             fi
+            mkdir -p ${PLUGIN_PATH}
           BACKUP
 
-          echo "backup_path=${BACKUP_PATH}" >> $GITHUB_OUTPUT
-
-      - name: Deploy plugin via rsync
-        timeout-minutes: 5
-        env:
-          HOST: ${{ secrets.SSH_HOST }}
-          WP_PATH: ${{ secrets.DEPLOY_PATH }}
-        run: |
-          PLUGIN=woo-attribution-bridge
-          PLUGIN_PATH="${WP_PATH}/wp-content/plugins/${PLUGIN}"
-
-          # Ensure plugin directory exists
-          ssh root@${HOST} "mkdir -p ${PLUGIN_PATH}"
-
-          # Rsync plugin files
-          rsync -avz --delete --timeout=120 \
-            --exclude '.git' \
-            --exclude 'tests' \
-            --exclude 'composer.json' \
-            --exclude 'composer.lock' \
-            --exclude 'phpunit.xml' \
-            --exclude 'phpcs.xml' \
-            --exclude '.phpcs.xml' \
-            ./src/ \
-            root@${HOST}:${PLUGIN_PATH}/
+          # Deploy using tar over SSH (works without rsync)
+          tar -czf - -C src . | ssh root@${HOST} "tar -xzf - -C ${PLUGIN_PATH}"
 
           # Fix permissions (CloudPanel uses clp:clp)
           ssh root@${HOST} "chown -R clp:clp ${PLUGIN_PATH}"
@@ -205,29 +152,22 @@ jobs:
           HOST: ${{ secrets.SSH_HOST }}
           SITE_URL: ${{ secrets.SITE_URL }}
         run: |
-          # Skip if SITE_URL not configured
           if [ -z "${SITE_URL}" ]; then
-            echo "::warning::SITE_URL not set, skipping"
+            echo "::warning::SITE_URL not set, skipping health check"
             exit 0
           fi
 
-          echo "Waiting for WordPress to reload..."
           sleep 5
-
-          # Check if site returns 200 (not 500 critical error)
           HTTP_CODE=$(ssh root@${HOST} \
-            "curl -sL -o /dev/null -w '%{http_code}' ${SITE_URL}")
+            "curl -sL -o /dev/null -w '%{http_code}' --max-time 30 ${SITE_URL}")
 
           echo "HTTP response code: ${HTTP_CODE}"
 
           if [ "$HTTP_CODE" -ge 500 ]; then
             echo "CRITICAL: Site returning HTTP ${HTTP_CODE}"
             exit 1
-          elif [ "$HTTP_CODE" -ge 400 ]; then
-            echo "WARNING: HTTP ${HTTP_CODE} (auth required?)"
-          else
-            echo "Site healthy with HTTP ${HTTP_CODE}"
           fi
+          echo "Site healthy"
 
       - name: Rollback on failure
         if: failure()
@@ -236,11 +176,10 @@ jobs:
           HOST: ${{ secrets.SSH_HOST }}
           WP_PATH: ${{ secrets.DEPLOY_PATH }}
         run: |
-          PLUGIN=woo-attribution-bridge
-          PLUGIN_PATH="${WP_PATH}/wp-content/plugins/${PLUGIN}"
+          PLUGIN_PATH="${WP_PATH}/wp-content/plugins/woo-attribution-bridge"
           BACKUP_PATH="${WP_PATH}/wp-content/plugins/.wab-backup-prod"
 
-          echo "Health check failed! Rolling back..."
+          echo "Deployment failed! Rolling back..."
 
           ssh root@${HOST} << ROLLBACK
             if [ -d "${BACKUP_PATH}" ]; then
@@ -248,7 +187,7 @@ jobs:
               mv ${BACKUP_PATH} ${PLUGIN_PATH}
               echo "Rollback complete"
             else
-              echo "No backup found - cannot rollback"
+              echo "No backup found"
               exit 1
             fi
           ROLLBACK
@@ -266,8 +205,7 @@ jobs:
         run: |
           echo "## Production Deployment Complete"
           echo ""
-          echo "- Dashboard: Deployed to production"
+          echo "- Dashboard: Built and deployed to production"
           echo "- WordPress Plugin: Deployed to production"
           echo ""
           echo "Commit: ${{ gitea.sha }}"
-          echo "Version: ${{ needs.build-dashboard.outputs.version }}"
