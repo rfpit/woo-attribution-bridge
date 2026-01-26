@@ -19,7 +19,7 @@ name: Deploy Production
 
 env:
   REGISTRY: gitea.internal.uru.onl
-  IMAGE_NAME: Renzo/attribution-bridge/dashboard
+  IMAGE_NAME: renzo/attribution-bridge/dashboard
 
 concurrency:
   group: deploy-production
