@@ -8,7 +8,7 @@
 const GOOGLE_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth";
 const GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token";
 const GOOGLE_REVOKE_URL = "https://oauth2.googleapis.com/revoke";
-const GOOGLE_ADS_API_URL = "https://googleads.googleapis.com/v15";
+const GOOGLE_ADS_API_URL = "https://googleads.googleapis.com/v18";
 
 /**
  * Google Ads configuration from environment variables.
@@ -197,7 +197,11 @@ export async function fetchAccessibleCustomers(
   );
 
   if (!response.ok) {
-    throw new Error("Failed to fetch accessible customers");
+    const errorData = await response.json().catch(() => ({}));
+    console.error("Google Ads API error:", JSON.stringify(errorData, null, 2));
+    const errorMessage =
+      errorData.error?.message || "Failed to fetch accessible customers";
+    throw new Error(errorMessage);
   }
 
   const data = await response.json();
