@@ -18,6 +18,7 @@ export interface GoogleAdsConfig {
   clientSecret: string;
   redirectUri: string;
   developerToken: string;
+  loginCustomerId?: string;
 }
 
 /**
@@ -48,6 +49,7 @@ export function getConfig(): GoogleAdsConfig {
   const clientSecret = process.env.GOOGLE_ADS_CLIENT_SECRET;
   const redirectUri = process.env.GOOGLE_ADS_REDIRECT_URI;
   const developerToken = process.env.GOOGLE_ADS_DEVELOPER_TOKEN;
+  const loginCustomerId = process.env.GOOGLE_ADS_LOGIN_CUSTOMER_ID;
 
   if (!clientId) {
     throw new Error("GOOGLE_ADS_CLIENT_ID environment variable is not set");
@@ -69,6 +71,7 @@ export function getConfig(): GoogleAdsConfig {
     clientSecret,
     redirectUri,
     developerToken,
+    loginCustomerId,
   };
 }
 
@@ -193,12 +196,22 @@ export async function fetchAccessibleCustomers(
     config.developerToken.substring(0, 8) + "...",
   );
 
+  const headers: Record<string, string> = {
+    Authorization: `Bearer ${accessToken}`,
+    "developer-token": config.developerToken,
+    "Content-Type": "application/json",
+    Accept: "application/json",
+  };
+
+  // Add login-customer-id if configured (MCC account)
+  if (config.loginCustomerId) {
+    headers["login-customer-id"] = config.loginCustomerId;
+    console.log("Using login-customer-id:", config.loginCustomerId);
+  }
+
   const response = await fetch(url, {
     method: "GET",
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-      "developer-token": config.developerToken,
-    },
+    headers,
   });
 
   console.log("Response status:", response.status, response.statusText);
