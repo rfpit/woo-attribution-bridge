@@ -263,17 +263,32 @@ export async function fetchCustomerDetails(
     LIMIT 1
   `;
 
-  const response = await fetch(
-    `${GOOGLE_ADS_API_URL}/customers/${customerId}/googleAds:searchStream`,
-    {
-      method: "POST",
-      headers,
-      body: JSON.stringify({ query }),
-    },
+  const url = `${GOOGLE_ADS_API_URL}/customers/${customerId}/googleAds:searchStream`;
+  console.log("Fetching customer details from:", url);
+  console.log("Using login-customer-id:", loginCustomerId || customerId);
+
+  const response = await fetch(url, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({ query }),
+  });
+
+  console.log(
+    "Customer details response status:",
+    response.status,
+    response.statusText,
   );
 
   if (!response.ok) {
-    throw new Error(`Failed to fetch customer details for ${customerId}`);
+    const errorData = await response.json().catch(() => ({}));
+    console.error(
+      "Customer details API error:",
+      JSON.stringify(errorData, null, 2),
+    );
+    const errorMessage =
+      errorData.error?.message ||
+      `Failed to fetch customer details for ${customerId}`;
+    throw new Error(errorMessage);
   }
 
   const data = await response.json();

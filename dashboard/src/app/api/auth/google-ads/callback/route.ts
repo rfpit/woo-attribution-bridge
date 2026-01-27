@@ -126,26 +126,39 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
 
     let accounts;
 
-    // If loginCustomerId is configured, use it directly (bypasses listAccessibleCustomers)
-    // This is needed because the REST API endpoint may return 501 UNIMPLEMENTED
-    // for some developer token configurations
+    // If loginCustomerId is configured, skip REST API validation entirely
+    // The REST API returns 501 UNIMPLEMENTED for some developer tokens
+    // (works fine with gRPC client libraries but not REST)
+    // We just save the connection - the tokens will work for conversions API
     if (config.loginCustomerId) {
-      console.log("Using configured loginCustomerId:", config.loginCustomerId);
-      try {
-        const account = await fetchCustomerDetails(
-          tokens.accessToken,
-          config.loginCustomerId,
-          config.loginCustomerId,
-        );
-        accounts = [account];
-      } catch (detailsErr) {
-        console.error("Failed to fetch customer details:", detailsErr);
-        throw new Error(
-          `Failed to fetch account details for customer ${config.loginCustomerId}`,
-        );
-      }
-    } else {
-      // No loginCustomerId configured - try to list accessible customers
+      console.log(
+        "Using configured loginCustomerId (skipping API validation):",
+        config.loginCustomerId,
+      );
+
+      // Create connection directly without API validation
+      await db.insert(adPlatformConnections).values({
+        userId: session.user.id,
+        platform: "google_ads",
+        accountId: config.loginCustomerId,
+        accountName: `Google Ads Account ${config.loginCustomerId}`,
+        accessToken: encrypt(tokens.accessToken),
+        refreshToken: tokens.refreshToken ? encrypt(tokens.refreshToken) : null,
+        tokenExpiresAt: calculateTokenExpiry(tokens.expiresIn),
+        status: "active",
+      });
+
+      const redirectUrl = new URL(
+        "/dashboard/platforms",
+        request.nextUrl.origin,
+      );
+      redirectUrl.searchParams.set("success", "true");
+      redirectUrl.searchParams.set("platform", "google_ads");
+      return NextResponse.redirect(redirectUrl);
+    }
+
+    // No loginCustomerId configured - try to list accessible customers via REST API
+    {
       const customerIds = await fetchAccessibleCustomers(tokens.accessToken);
 
       if (customerIds.length === 0) {

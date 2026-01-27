@@ -120,7 +120,8 @@ export default function DashboardLayout({
       <main className="pl-64">
         <div className="p-8">{children}</div>
         <div className="fixed bottom-2 right-2 text-xs text-muted-foreground/50">
-          Build: {process.env.NEXT_PUBLIC_BUILD_DATE || "dev"}
+          {process.env.NEXT_PUBLIC_BUILD_BRANCH || "dev"} ·{" "}
+          {process.env.NEXT_PUBLIC_BUILD_DATE || "local"}
         </div>
       </main>
     </div>
