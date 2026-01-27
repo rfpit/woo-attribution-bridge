@@ -16,8 +16,10 @@ import { adPlatformConnections, pendingOAuthTokens } from "@/db/schema";
 import {
   exchangeCodeForTokens,
   fetchAccessibleCustomers,
+  fetchCustomerDetails,
   fetchMultipleCustomerDetails,
   calculateTokenExpiry,
+  getConfig,
 } from "@/lib/google-ads";
 import { encrypt, decryptJson } from "@/lib/encryption";
 
@@ -120,27 +122,62 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   try {
     // Exchange code for tokens
     const tokens = await exchangeCodeForTokens(code);
+    const config = getConfig();
 
-    // Fetch accessible accounts
-    const customerIds = await fetchAccessibleCustomers(tokens.accessToken);
+    let accounts;
 
-    if (customerIds.length === 0) {
+    // If loginCustomerId is configured, use it directly (bypasses listAccessibleCustomers)
+    // This is needed because the REST API endpoint may return 501 UNIMPLEMENTED
+    // for some developer token configurations
+    if (config.loginCustomerId) {
+      console.log("Using configured loginCustomerId:", config.loginCustomerId);
+      try {
+        const account = await fetchCustomerDetails(
+          tokens.accessToken,
+          config.loginCustomerId,
+          config.loginCustomerId,
+        );
+        accounts = [account];
+      } catch (detailsErr) {
+        console.error("Failed to fetch customer details:", detailsErr);
+        throw new Error(
+          `Failed to fetch account details for customer ${config.loginCustomerId}`,
+        );
+      }
+    } else {
+      // No loginCustomerId configured - try to list accessible customers
+      const customerIds = await fetchAccessibleCustomers(tokens.accessToken);
+
+      if (customerIds.length === 0) {
+        const redirectUrl = new URL(
+          "/dashboard/platforms",
+          request.nextUrl.origin,
+        );
+        redirectUrl.searchParams.set(
+          "error",
+          "No Google Ads accounts found. Please create an account first.",
+        );
+        return NextResponse.redirect(redirectUrl);
+      }
+
+      // Fetch account details
+      accounts = await fetchMultipleCustomerDetails(
+        tokens.accessToken,
+        customerIds,
+      );
+    }
+
+    if (!accounts || accounts.length === 0) {
       const redirectUrl = new URL(
         "/dashboard/platforms",
         request.nextUrl.origin,
       );
       redirectUrl.searchParams.set(
         "error",
-        "No Google Ads accounts found. Please create an account first.",
+        "No Google Ads accounts found. Please check your configuration.",
       );
       return NextResponse.redirect(redirectUrl);
     }
-
-    // Fetch account details
-    const accounts = await fetchMultipleCustomerDetails(
-      tokens.accessToken,
-      customerIds,
-    );
 
     if (accounts.length === 1) {
       // Single account - create connection directly
