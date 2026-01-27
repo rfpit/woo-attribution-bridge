@@ -26,6 +26,14 @@ import { encrypt, decryptJson } from "@/lib/encryption";
 const STATE_COOKIE_NAME = "google_ads_oauth_state";
 const PENDING_TOKEN_EXPIRY_MS = 10 * 60 * 1000; // 10 minutes
 
+/**
+ * Get the base URL for redirects.
+ * Prefers NEXTAUTH_URL env var over request origin (which may be internal container URL).
+ */
+function getBaseUrl(request: NextRequest): string {
+  return process.env.NEXTAUTH_URL || request.nextUrl.origin;
+}
+
 interface OAuthState {
   state: string;
   userId: string;
@@ -51,7 +59,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   if (error) {
     const errorDescription =
       searchParams.get("error_description") || "OAuth authorization failed";
-    const redirectUrl = new URL("/dashboard/platforms", request.nextUrl.origin);
+    const redirectUrl = new URL("/dashboard/platforms", getBaseUrl(request));
     redirectUrl.searchParams.set("error", errorDescription);
     return NextResponse.redirect(redirectUrl);
   }
@@ -148,10 +156,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         status: "active",
       });
 
-      const redirectUrl = new URL(
-        "/dashboard/platforms",
-        request.nextUrl.origin,
-      );
+      const redirectUrl = new URL("/dashboard/platforms", getBaseUrl(request));
       redirectUrl.searchParams.set("success", "true");
       redirectUrl.searchParams.set("platform", "google_ads");
       return NextResponse.redirect(redirectUrl);
@@ -164,7 +169,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       if (customerIds.length === 0) {
         const redirectUrl = new URL(
           "/dashboard/platforms",
-          request.nextUrl.origin,
+          getBaseUrl(request),
         );
         redirectUrl.searchParams.set(
           "error",
@@ -181,10 +186,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     }
 
     if (!accounts || accounts.length === 0) {
-      const redirectUrl = new URL(
-        "/dashboard/platforms",
-        request.nextUrl.origin,
-      );
+      const redirectUrl = new URL("/dashboard/platforms", getBaseUrl(request));
       redirectUrl.searchParams.set(
         "error",
         "No Google Ads accounts found. Please check your configuration.",
@@ -206,10 +208,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         status: "active",
       });
 
-      const redirectUrl = new URL(
-        "/dashboard/platforms",
-        request.nextUrl.origin,
-      );
+      const redirectUrl = new URL("/dashboard/platforms", getBaseUrl(request));
       redirectUrl.searchParams.set("success", "true");
       redirectUrl.searchParams.set("platform", "google_ads");
       return NextResponse.redirect(redirectUrl);
@@ -231,13 +230,13 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
 
     const redirectUrl = new URL(
       "/dashboard/platforms/google-ads/select",
-      request.nextUrl.origin,
+      getBaseUrl(request),
     );
     redirectUrl.searchParams.set("pendingTokenId", pendingToken.id);
     return NextResponse.redirect(redirectUrl);
   } catch (err) {
     console.error("Google Ads OAuth callback error:", err);
-    const redirectUrl = new URL("/dashboard/platforms", request.nextUrl.origin);
+    const redirectUrl = new URL("/dashboard/platforms", getBaseUrl(request));
     redirectUrl.searchParams.set(
       "error",
       err instanceof Error ? err.message : "Failed to connect Google Ads",

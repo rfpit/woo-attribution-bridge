@@ -28,6 +28,14 @@ import { encrypt, decryptJson } from "@/lib/encryption";
 const STATE_COOKIE_NAME = "tiktok_oauth_state";
 const PENDING_TOKEN_EXPIRY_MS = 10 * 60 * 1000; // 10 minutes
 
+/**
+ * Get the base URL for redirects.
+ * Prefers NEXTAUTH_URL env var over request origin (which may be internal container URL).
+ */
+function getBaseUrl(request: NextRequest): string {
+  return process.env.NEXTAUTH_URL || request.nextUrl.origin;
+}
+
 interface OAuthState {
   state: string;
   userId: string;
@@ -43,7 +51,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   const session = await auth();
 
   if (!session?.user?.id) {
-    const redirectUrl = new URL("/dashboard/platforms", request.nextUrl.origin);
+    const redirectUrl = new URL("/dashboard/platforms", getBaseUrl(request));
     redirectUrl.searchParams.set("error", "Unauthorized");
     return NextResponse.redirect(redirectUrl);
   }
@@ -55,7 +63,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   if (error) {
     const errorDescription =
       searchParams.get("error_description") || "OAuth authorization failed";
-    const redirectUrl = new URL("/dashboard/platforms", request.nextUrl.origin);
+    const redirectUrl = new URL("/dashboard/platforms", getBaseUrl(request));
     redirectUrl.searchParams.set("error", errorDescription);
     return NextResponse.redirect(redirectUrl);
   }
@@ -65,13 +73,13 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   const state = searchParams.get("state");
 
   if (!code) {
-    const redirectUrl = new URL("/dashboard/platforms", request.nextUrl.origin);
+    const redirectUrl = new URL("/dashboard/platforms", getBaseUrl(request));
     redirectUrl.searchParams.set("error", "Authorization code is required");
     return NextResponse.redirect(redirectUrl);
   }
 
   if (!state) {
-    const redirectUrl = new URL("/dashboard/platforms", request.nextUrl.origin);
+    const redirectUrl = new URL("/dashboard/platforms", getBaseUrl(request));
     redirectUrl.searchParams.set("error", "State parameter is required");
     return NextResponse.redirect(redirectUrl);
   }
@@ -81,7 +89,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   const stateCookie = cookieStore.get(STATE_COOKIE_NAME);
 
   if (!stateCookie?.value) {
-    const redirectUrl = new URL("/dashboard/platforms", request.nextUrl.origin);
+    const redirectUrl = new URL("/dashboard/platforms", getBaseUrl(request));
     redirectUrl.searchParams.set(
       "error",
       "Invalid state: no state cookie found",
@@ -93,7 +101,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   try {
     storedState = decryptJson<OAuthState>(stateCookie.value);
   } catch {
-    const redirectUrl = new URL("/dashboard/platforms", request.nextUrl.origin);
+    const redirectUrl = new URL("/dashboard/platforms", getBaseUrl(request));
     redirectUrl.searchParams.set(
       "error",
       "Invalid state: cookie decryption failed",
@@ -102,13 +110,13 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   }
 
   if (storedState.state !== state) {
-    const redirectUrl = new URL("/dashboard/platforms", request.nextUrl.origin);
+    const redirectUrl = new URL("/dashboard/platforms", getBaseUrl(request));
     redirectUrl.searchParams.set("error", "Invalid state: state mismatch");
     return NextResponse.redirect(redirectUrl);
   }
 
   if (storedState.expiresAt < Date.now()) {
-    const redirectUrl = new URL("/dashboard/platforms", request.nextUrl.origin);
+    const redirectUrl = new URL("/dashboard/platforms", getBaseUrl(request));
     redirectUrl.searchParams.set(
       "error",
       "State has expired. Please try again.",
@@ -117,7 +125,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   }
 
   if (storedState.userId !== session.user.id) {
-    const redirectUrl = new URL("/dashboard/platforms", request.nextUrl.origin);
+    const redirectUrl = new URL("/dashboard/platforms", getBaseUrl(request));
     redirectUrl.searchParams.set("error", "Invalid state: user mismatch");
     return NextResponse.redirect(redirectUrl);
   }
@@ -136,10 +144,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     );
 
     if (advertisers.length === 0) {
-      const redirectUrl = new URL(
-        "/dashboard/platforms",
-        request.nextUrl.origin,
-      );
+      const redirectUrl = new URL("/dashboard/platforms", getBaseUrl(request));
       redirectUrl.searchParams.set(
         "error",
         "No TikTok ad accounts found. Please create an ad account first.",
@@ -169,10 +174,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         status: "active",
       });
 
-      const redirectUrl = new URL(
-        "/dashboard/platforms",
-        request.nextUrl.origin,
-      );
+      const redirectUrl = new URL("/dashboard/platforms", getBaseUrl(request));
       redirectUrl.searchParams.set("success", "true");
       redirectUrl.searchParams.set("platform", "tiktok_ads");
       return NextResponse.redirect(redirectUrl);
@@ -194,13 +196,13 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
 
     const redirectUrl = new URL(
       "/dashboard/platforms/tiktok/select",
-      request.nextUrl.origin,
+      getBaseUrl(request),
     );
     redirectUrl.searchParams.set("pendingTokenId", pendingToken.id);
     return NextResponse.redirect(redirectUrl);
   } catch (err) {
     console.error("TikTok OAuth callback error:", err);
-    const redirectUrl = new URL("/dashboard/platforms", request.nextUrl.origin);
+    const redirectUrl = new URL("/dashboard/platforms", getBaseUrl(request));
     redirectUrl.searchParams.set(
       "error",
       err instanceof Error ? err.message : "Failed to connect TikTok Ads",

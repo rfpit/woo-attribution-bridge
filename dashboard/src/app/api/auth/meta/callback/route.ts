@@ -25,6 +25,14 @@ import { encrypt, decryptJson } from "@/lib/encryption";
 const STATE_COOKIE_NAME = "meta_oauth_state";
 const PENDING_TOKEN_EXPIRY_MS = 10 * 60 * 1000; // 10 minutes
 
+/**
+ * Get the base URL for redirects.
+ * Prefers NEXTAUTH_URL env var over request origin (which may be internal container URL).
+ */
+function getBaseUrl(request: NextRequest): string {
+  return process.env.NEXTAUTH_URL || request.nextUrl.origin;
+}
+
 interface OAuthState {
   state: string;
   userId: string;
@@ -50,7 +58,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   if (error) {
     const errorDescription =
       searchParams.get("error_description") || "OAuth authorization failed";
-    const redirectUrl = new URL("/dashboard/platforms", request.nextUrl.origin);
+    const redirectUrl = new URL("/dashboard/platforms", getBaseUrl(request));
     redirectUrl.searchParams.set("error", errorDescription);
     return NextResponse.redirect(redirectUrl);
   }
@@ -131,10 +139,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     const accounts = await fetchAdAccounts(longLivedTokens.accessToken);
 
     if (accounts.length === 0) {
-      const redirectUrl = new URL(
-        "/dashboard/platforms",
-        request.nextUrl.origin,
-      );
+      const redirectUrl = new URL("/dashboard/platforms", getBaseUrl(request));
       redirectUrl.searchParams.set(
         "error",
         "No Meta ad accounts found. Please create an ad account first.",
@@ -156,10 +161,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         status: "active",
       });
 
-      const redirectUrl = new URL(
-        "/dashboard/platforms",
-        request.nextUrl.origin,
-      );
+      const redirectUrl = new URL("/dashboard/platforms", getBaseUrl(request));
       redirectUrl.searchParams.set("success", "true");
       redirectUrl.searchParams.set("platform", "meta_ads");
       return NextResponse.redirect(redirectUrl);
@@ -181,13 +183,13 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
 
     const redirectUrl = new URL(
       "/dashboard/platforms/meta/select",
-      request.nextUrl.origin,
+      getBaseUrl(request),
     );
     redirectUrl.searchParams.set("pendingTokenId", pendingToken.id);
     return NextResponse.redirect(redirectUrl);
   } catch (err) {
     console.error("Meta OAuth callback error:", err);
-    const redirectUrl = new URL("/dashboard/platforms", request.nextUrl.origin);
+    const redirectUrl = new URL("/dashboard/platforms", getBaseUrl(request));
     redirectUrl.searchParams.set(
       "error",
       err instanceof Error ? err.message : "Failed to connect Meta Ads",
