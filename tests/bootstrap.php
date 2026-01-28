@@ -46,7 +46,7 @@ if ( ! defined( 'COOKIE_DOMAIN' ) ) {
 }
 
 if ( ! defined( 'WAB_VERSION' ) ) {
-	define( 'WAB_VERSION', '1.0.0' );
+	define( 'WAB_VERSION', '1.1.0' );
 }
 
 // Mock WP_Error class.
@@ -124,6 +124,10 @@ if ( ! class_exists( 'WP_REST_Response' ) ) {
 
 		public function get_status() {
 			return $this->status;
+		}
+
+		public function set_status( int $status ): void {
+			$this->status = $status;
 		}
 	}
 }
@@ -381,6 +385,9 @@ require_once dirname( __DIR__ ) . '/src/includes/class-wab-fingerprint.php';
 
 // Load journey tracker.
 require_once dirname( __DIR__ ) . '/src/includes/class-wab-journey-tracker.php';
+
+// Load upgrader.
+require_once dirname( __DIR__ ) . '/src/includes/class-wab-upgrader.php';
 
 // Load test base class.
 require_once __DIR__ . '/Unit/WabTestCase.php';

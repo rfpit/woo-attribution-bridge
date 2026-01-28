@@ -465,9 +465,12 @@ class RestApiTest extends WabTestCase {
 	}
 
 	/**
-	 * Test health_check endpoint.
+	 * Test health_check endpoint (basic functionality).
 	 */
 	public function test_health_check(): void {
+		// Set up mocks for the enhanced health check.
+		$this->mock_upgrader_tables_exist( true );
+
 		Functions\when( 'current_time' )->justReturn( '2024-01-15T10:30:00+00:00' );
 
 		$request = new WP_REST_Request();
@@ -476,9 +479,11 @@ class RestApiTest extends WabTestCase {
 
 		$this->assertInstanceOf( WP_REST_Response::class, $response );
 		$data = $response->get_data();
-		$this->assertEquals( 'ok', $data['status'] );
+		// Status is now 'healthy' instead of 'ok'.
+		$this->assertEquals( 'healthy', $data['status'] );
 		$this->assertArrayHasKey( 'timestamp', $data );
 		$this->assertArrayHasKey( 'wab_version', $data );
+		$this->assertArrayHasKey( 'tables', $data );
 	}
 
 	/**
@@ -844,6 +849,235 @@ class RestApiTest extends WabTestCase {
 		$mock_order->shouldReceive( 'get_meta' )->andReturn( null );
 
 		return $mock_order;
+	}
+
+	/**
+	 * Test health_check returns healthy when all tables exist.
+	 */
+	public function test_health_check_returns_healthy_when_all_tables_exist(): void {
+		global $wpdb, $wab_test_options;
+
+		// Mock WAB_Upgrader to return all tables as existing.
+		$this->mock_upgrader_tables_exist( true );
+
+		// Set up options for integrations.
+		$wab_test_options['wab_meta_enabled'] = true;
+		$wab_test_options['wab_meta_pixel_id'] = 'pixel123';
+		$wab_test_options['wab_meta_access_token'] = 'token123';
+		$wab_test_options['wab_google_enabled'] = false;
+
+		Functions\when( 'current_time' )->justReturn( '2024-01-15T10:30:00+00:00' );
+
+		$request = new WP_REST_Request();
+
+		$response = $this->rest_api->health_check( $request );
+
+		$this->assertInstanceOf( WP_REST_Response::class, $response );
+		$data = $response->get_data();
+		$this->assertEquals( 'healthy', $data['status'] );
+		$this->assertArrayHasKey( 'tables', $data );
+		$this->assertArrayHasKey( 'integrations', $data );
+		$this->assertEmpty( $data['missing_tables'] );
+	}
+
+	/**
+	 * Test health_check returns degraded when tables are missing.
+	 */
+	public function test_health_check_returns_degraded_when_tables_missing(): void {
+		// Mock WAB_Upgrader to return some tables as missing.
+		$this->mock_upgrader_tables_exist( false, [ 'wab_identities' ] );
+
+		Functions\when( 'current_time' )->justReturn( '2024-01-15T10:30:00+00:00' );
+
+		$request = new WP_REST_Request();
+
+		$response = $this->rest_api->health_check( $request );
+
+		$this->assertInstanceOf( WP_REST_Response::class, $response );
+		$data = $response->get_data();
+		$this->assertEquals( 'degraded', $data['status'] );
+		$this->assertContains( 'wab_identities', $data['missing_tables'] );
+	}
+
+	/**
+	 * Test health_check returns 503 when degraded.
+	 */
+	public function test_health_check_returns_503_when_degraded(): void {
+		// Mock WAB_Upgrader to return some tables as missing.
+		$this->mock_upgrader_tables_exist( false, [ 'wab_queue' ] );
+
+		Functions\when( 'current_time' )->justReturn( '2024-01-15T10:30:00+00:00' );
+
+		$request = new WP_REST_Request();
+
+		$response = $this->rest_api->health_check( $request );
+
+		$this->assertInstanceOf( WP_REST_Response::class, $response );
+		$this->assertEquals( 503, $response->get_status() );
+	}
+
+	/**
+	 * Test health_check includes integration status.
+	 */
+	public function test_health_check_includes_integration_status(): void {
+		global $wab_test_options;
+
+		$this->mock_upgrader_tables_exist( true );
+
+		// Meta: enabled and configured.
+		$wab_test_options['wab_meta_enabled'] = true;
+		$wab_test_options['wab_meta_pixel_id'] = 'pixel123';
+		$wab_test_options['wab_meta_access_token'] = 'token123';
+
+		// Google: enabled but not configured.
+		$wab_test_options['wab_google_enabled'] = true;
+		$wab_test_options['wab_google_customer_id'] = '';
+
+		// TikTok: disabled.
+		$wab_test_options['wab_tiktok_enabled'] = false;
+
+		// Swetrix: enabled and configured.
+		$wab_test_options['wab_swetrix_enabled'] = true;
+		$wab_test_options['wab_swetrix_project_id'] = 'proj123';
+
+		Functions\when( 'current_time' )->justReturn( '2024-01-15T10:30:00+00:00' );
+
+		$request = new WP_REST_Request();
+
+		$response = $this->rest_api->health_check( $request );
+		$data = $response->get_data();
+
+		$this->assertArrayHasKey( 'integrations', $data );
+
+		// Meta: enabled and configured.
+		$this->assertTrue( $data['integrations']['meta']['enabled'] );
+		$this->assertTrue( $data['integrations']['meta']['configured'] );
+
+		// Google: enabled but not configured.
+		$this->assertTrue( $data['integrations']['google']['enabled'] );
+		$this->assertFalse( $data['integrations']['google']['configured'] );
+
+		// TikTok: disabled.
+		$this->assertFalse( $data['integrations']['tiktok']['enabled'] );
+		$this->assertFalse( $data['integrations']['tiktok']['configured'] );
+
+		// Swetrix: enabled and configured.
+		$this->assertTrue( $data['integrations']['swetrix']['enabled'] );
+		$this->assertTrue( $data['integrations']['swetrix']['configured'] );
+	}
+
+	/**
+	 * Test health_check includes queue stats when table exists.
+	 */
+	public function test_health_check_includes_queue_stats(): void {
+		global $wpdb;
+
+		// Set up mock that handles both table existence AND queue stats.
+		\WAB_Upgrader::clear_cache();
+
+		$wpdb = Mockery::mock( 'wpdb' );
+		$wpdb->prefix = 'wp_';
+
+		$wpdb->shouldReceive( 'prepare' )->andReturnUsing( function( $query, ...$args ) {
+			if ( ! empty( $args ) ) {
+				return str_replace( '%s', $args[0], $query );
+			}
+			return $query;
+		} );
+
+		$wpdb->shouldReceive( 'get_var' )->andReturnUsing( function( $query ) {
+			// Table existence checks.
+			foreach ( \WAB_Upgrader::REQUIRED_TABLES as $table ) {
+				$full_name = 'wp_' . $table;
+				if ( strpos( $query, $full_name ) !== false && strpos( $query, 'SHOW TABLES' ) !== false ) {
+					return $full_name;
+				}
+			}
+			// Queue stats queries.
+			if ( strpos( $query, 'pending' ) !== false ) {
+				return '5';
+			}
+			if ( strpos( $query, 'failed' ) !== false ) {
+				return '2';
+			}
+			return null;
+		} );
+
+		Functions\when( 'current_time' )->justReturn( '2024-01-15T10:30:00+00:00' );
+
+		$request = new WP_REST_Request();
+
+		$response = $this->rest_api->health_check( $request );
+		$data = $response->get_data();
+
+		$this->assertArrayHasKey( 'queue', $data );
+		$this->assertEquals( 5, $data['queue']['pending'] );
+		$this->assertEquals( 2, $data['queue']['failed'] );
+	}
+
+	/**
+	 * Test health_check omits queue stats when table is missing.
+	 */
+	public function test_health_check_omits_queue_stats_when_table_missing(): void {
+		// Mock WAB_Upgrader with wab_queue missing.
+		$this->mock_upgrader_tables_exist( false, [ 'wab_queue' ] );
+
+		Functions\when( 'current_time' )->justReturn( '2024-01-15T10:30:00+00:00' );
+
+		$request = new WP_REST_Request();
+
+		$response = $this->rest_api->health_check( $request );
+		$data = $response->get_data();
+
+		$this->assertArrayNotHasKey( 'queue', $data );
+	}
+
+	/**
+	 * Helper to mock WAB_Upgrader table existence checks.
+	 *
+	 * @param bool  $all_exist     Whether all tables exist.
+	 * @param array $missing_tables Tables to mark as missing.
+	 */
+	private function mock_upgrader_tables_exist( bool $all_exist, array $missing_tables = [] ): void {
+		// Clear any existing cache.
+		\WAB_Upgrader::clear_cache();
+
+		// Set up wpdb mock to return appropriate values for table checks.
+		global $wpdb;
+		$wpdb = Mockery::mock( 'wpdb' );
+		$wpdb->prefix = 'wp_';
+
+		// The prepare function substitutes %s with the argument.
+		$wpdb->shouldReceive( 'prepare' )->andReturnUsing( function( $query, ...$args ) {
+			// Simple substitution of %s with first argument.
+			if ( ! empty( $args ) ) {
+				return str_replace( '%s', $args[0], $query );
+			}
+			return $query;
+		} );
+
+		$wpdb->shouldReceive( 'get_var' )->andReturnUsing( function( $query ) use ( $all_exist, $missing_tables ) {
+			// Check which table is being queried.
+			foreach ( \WAB_Upgrader::REQUIRED_TABLES as $table ) {
+				$full_name = 'wp_' . $table;
+				if ( strpos( $query, $full_name ) !== false ) {
+					// If this table is in the missing list, return null.
+					if ( in_array( $table, $missing_tables, true ) ) {
+						return null;
+					}
+					// Otherwise return the table name to indicate it exists.
+					return $full_name;
+				}
+			}
+			// For queue stats queries.
+			if ( strpos( $query, 'pending' ) !== false ) {
+				return '5';
+			}
+			if ( strpos( $query, 'failed' ) !== false ) {
+				return '2';
+			}
+			return null;
+		} );
 	}
 
 	/**
