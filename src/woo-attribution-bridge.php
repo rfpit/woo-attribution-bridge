@@ -21,11 +21,27 @@
 defined( 'ABSPATH' ) || exit;
 
 // Plugin constants.
-define( 'WAB_VERSION', '1.2.0' );
+define( 'WAB_VERSION', '1.2.1' );
 define( 'WAB_PLUGIN_FILE', __FILE__ );
 define( 'WAB_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'WAB_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
 define( 'WAB_PLUGIN_BASENAME', plugin_basename( __FILE__ ) );
+
+/**
+ * Run database table creation on version change.
+ *
+ * WordPress activation hooks only run on fresh install, not updates.
+ * This ensures new tables are created when the plugin is updated.
+ * dbDelta() is idempotent - safe to run repeatedly.
+ */
+add_action( 'admin_init', function() {
+	$stored_version = get_option( 'wab_version', '0' );
+	if ( $stored_version !== WAB_VERSION ) {
+		require_once WAB_PLUGIN_DIR . 'includes/class-wab-activator.php';
+		WAB_Activator::create_tables();
+		update_option( 'wab_version', WAB_VERSION );
+	}
+} );
 
 /**
  * Check requirements before initializing.

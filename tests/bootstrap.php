@@ -46,7 +46,7 @@ if ( ! defined( 'COOKIE_DOMAIN' ) ) {
 }
 
 if ( ! defined( 'WAB_VERSION' ) ) {
-	define( 'WAB_VERSION', '1.1.0' );
+	define( 'WAB_VERSION', '1.2.1' );
 }
 
 // Mock WP_Error class.
@@ -385,9 +385,6 @@ require_once dirname( __DIR__ ) . '/src/includes/class-wab-fingerprint.php';
 
 // Load journey tracker.
 require_once dirname( __DIR__ ) . '/src/includes/class-wab-journey-tracker.php';
-
-// Load upgrader.
-require_once dirname( __DIR__ ) . '/src/includes/class-wab-upgrader.php';
 
 // Load test base class.
 require_once __DIR__ . '/Unit/WabTestCase.php';

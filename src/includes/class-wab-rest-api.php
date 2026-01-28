@@ -565,156 +565,28 @@ class WAB_REST_API {
 	/**
 	 * Health check endpoint.
 	 *
-	 * Returns detailed status including table verification, integration status,
-	 * and queue statistics. Returns 503 if system is in degraded state.
-	 *
 	 * @param WP_REST_Request $request Request object.
 	 * @return WP_REST_Response
 	 */
 	public function health_check( WP_REST_Request $request ): WP_REST_Response {
-		$wab_version = defined( 'WAB_VERSION' ) ? WAB_VERSION : '1.0.0';
-		$db_version = get_option( 'wab_version', '' );
+		// Check if dashboard connection is configured.
+		$dashboard_enabled = get_option( 'wab_dashboard_enabled' );
+		$has_api_key = ! empty( get_option( 'wab_api_key' ) );
 
-		// Check table status.
-		$tables = [];
-		$missing_tables = [];
-
-		if ( class_exists( 'WAB_Upgrader' ) ) {
-			foreach ( WAB_Upgrader::REQUIRED_TABLES as $table ) {
-				$exists = WAB_Upgrader::table_exists( $table );
-				$tables[ $table ] = $exists;
-				if ( ! $exists ) {
-					$missing_tables[] = $table;
-				}
-			}
-		}
-
-		// Determine status.
-		$is_healthy = empty( $missing_tables );
-		$status = $is_healthy ? 'healthy' : 'degraded';
-
-		// Build response data.
-		$data = [
-			'status'         => $status,
-			'wab_version'    => $wab_version,
-			'db_version'     => $db_version,
-			'tables'         => $tables,
-			'missing_tables' => $missing_tables,
-			'integrations'   => $this->get_integration_status(),
-			'timestamp'      => current_time( 'c' ),
-		];
-
-		// Add queue stats if queue table exists.
-		if ( ! in_array( 'wab_queue', $missing_tables, true ) ) {
-			$data['queue'] = $this->get_queue_stats();
-		}
-
-		// Allow filtering of health check data.
-		$data = apply_filters( 'wab_health_check_data', $data );
-
-		$response = new WP_REST_Response( $data );
-
-		// Set HTTP status code based on health.
-		if ( ! $is_healthy ) {
-			$response->set_status( 503 );
-		}
-
-		return $response;
-	}
-
-	/**
-	 * Get integration status for health check.
-	 *
-	 * @return array Integration status.
-	 */
-	private function get_integration_status(): array {
-		return [
-			'meta'    => [
-				'enabled'    => (bool) get_option( 'wab_meta_enabled' ),
-				'configured' => $this->is_meta_configured(),
+		return new WP_REST_Response( [
+			'status'      => 'ok',
+			'timestamp'   => current_time( 'c' ),
+			'wab_version' => defined( 'WAB_VERSION' ) ? WAB_VERSION : '1.0.0',
+			'wc_version'  => defined( 'WC_VERSION' ) ? WC_VERSION : 'unknown',
+			'site_url'    => home_url(),
+			'site_name'   => get_bloginfo( 'name' ),
+			'timezone'    => wp_timezone_string(),
+			'currency'    => function_exists( 'get_woocommerce_currency' ) ? get_woocommerce_currency() : 'USD',
+			'dashboard'   => [
+				'enabled'  => (bool) $dashboard_enabled,
+				'api_key'  => $has_api_key,
 			],
-			'google'  => [
-				'enabled'    => (bool) get_option( 'wab_google_enabled' ),
-				'configured' => $this->is_google_configured(),
-			],
-			'tiktok'  => [
-				'enabled'    => (bool) get_option( 'wab_tiktok_enabled' ),
-				'configured' => $this->is_tiktok_configured(),
-			],
-			'swetrix' => [
-				'enabled'    => (bool) get_option( 'wab_swetrix_enabled' ),
-				'configured' => $this->is_swetrix_configured(),
-			],
-		];
-	}
-
-	/**
-	 * Check if Meta integration is configured.
-	 *
-	 * @return bool True if configured.
-	 */
-	private function is_meta_configured(): bool {
-		return ! empty( get_option( 'wab_meta_pixel_id' ) )
-			&& ! empty( get_option( 'wab_meta_access_token' ) );
-	}
-
-	/**
-	 * Check if Google integration is configured.
-	 *
-	 * @return bool True if configured.
-	 */
-	private function is_google_configured(): bool {
-		return ! empty( get_option( 'wab_google_customer_id' ) )
-			&& ! empty( get_option( 'wab_google_conversion_action_id' ) );
-	}
-
-	/**
-	 * Check if TikTok integration is configured.
-	 *
-	 * @return bool True if configured.
-	 */
-	private function is_tiktok_configured(): bool {
-		return ! empty( get_option( 'wab_tiktok_pixel_code' ) )
-			&& ! empty( get_option( 'wab_tiktok_access_token' ) );
-	}
-
-	/**
-	 * Check if Swetrix integration is configured.
-	 *
-	 * @return bool True if configured.
-	 */
-	private function is_swetrix_configured(): bool {
-		return ! empty( get_option( 'wab_swetrix_project_id' ) );
-	}
-
-	/**
-	 * Get queue statistics for health check.
-	 *
-	 * @return array Queue stats.
-	 */
-	private function get_queue_stats(): array {
-		global $wpdb;
-
-		$table = $wpdb->prefix . 'wab_queue';
-
-		$pending = (int) $wpdb->get_var(
-			$wpdb->prepare(
-				"SELECT COUNT(*) FROM {$table} WHERE status = %s",
-				'pending'
-			)
-		);
-
-		$failed = (int) $wpdb->get_var(
-			$wpdb->prepare(
-				"SELECT COUNT(*) FROM {$table} WHERE status = %s",
-				'failed'
-			)
-		);
-
-		return [
-			'pending' => $pending,
-			'failed'  => $failed,
-		];
+		] );
 	}
 
 	/**
